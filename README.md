@@ -10,7 +10,7 @@
 - TypeScript в строгом режиме.
 - IndexedDB в браузере и Expo SQLite на iOS через единый API настроек.
 - Service Worker, Web App Manifest и статический экспорт без серверного backend.
-- Expo Symbols для иконок, Expo Haptics на iOS и React Native SVG для графика и кольца.
+- Lucide React Native и единый `AppIcon` для SVG-иконок, Expo Haptics на iOS и React Native SVG для графика и кольца.
 - ESLint, Prettier и Jest с jest-expo.
 
 ## Окружение
@@ -43,6 +43,8 @@ npx.cmd --yes serve@14.2.6 --single --listen 4174 --no-clipboard dist
 ```
 
 Откройте `http://localhost:4174`. Инструкции по [проверке PWA, установке на iPhone и размещению на Cloudflare Pages](docs/PWA.md).
+
+[HOTFIX 01.1: причина исчезновения иконок, исправленные пути ресурсов и результаты проверок](docs/HOTFIX-01.1-ICONS.md).
 
 ## Запуск нативной версии
 

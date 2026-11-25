@@ -1,4 +1,3 @@
-import type { SFSymbol } from 'expo-symbols';
 import { use, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -8,7 +7,7 @@ import { Card } from '@/components/card';
 import { useComingSoon } from '@/components/coming-soon';
 import { Dialog } from '@/components/dialog';
 import { AppHeader, SectionHeader } from '@/components/headers';
-import { Icon } from '@/components/icon';
+import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { ScreenContainer } from '@/components/screen-container';
 import { SettingsRow } from '@/components/settings-row';
 import { sectionTitles } from '@/constants/sections';
@@ -28,32 +27,32 @@ const appearance = 'Внешний вид';
 
 const sections: readonly {
   title: string;
-  rows: readonly { label: string; icon: SFSymbol }[];
+  rows: readonly { label: string; icon: AppIconName }[];
 }[] = [
   {
     title: 'Профиль и цели',
     rows: [
-      { label: 'Личные данные', icon: 'person.crop.circle' },
-      { label: 'Мои цели', icon: 'scope' },
-      { label: 'Параметры тела', icon: 'figure.stand' },
-      { label: 'Настройки питания', icon: 'fork.knife' },
-      { label: 'Настройки тренировок', icon: 'dumbbell' },
+      { label: 'Личные данные', icon: 'CircleUserRound' },
+      { label: 'Мои цели', icon: 'Target' },
+      { label: 'Параметры тела', icon: 'Accessibility' },
+      { label: 'Настройки питания', icon: 'Utensils' },
+      { label: 'Настройки тренировок', icon: 'Dumbbell' },
     ],
   },
   {
     title: 'Приложение',
     rows: [
-      { label: appearance, icon: 'circle.lefthalf.filled' },
-      { label: 'Уведомления', icon: 'bell' },
-      { label: 'Единицы измерения', icon: 'ruler' },
+      { label: appearance, icon: 'Contrast' },
+      { label: 'Уведомления', icon: 'Bell' },
+      { label: 'Единицы измерения', icon: 'Ruler' },
     ],
   },
   {
     title: 'Данные',
     rows: [
-      { label: 'Apple Health', icon: 'heart' },
-      { label: 'Резервное копирование', icon: 'externaldrive' },
-      { label: 'О приложении', icon: 'info.circle' },
+      { label: 'Apple Health', icon: 'Heart' },
+      { label: 'Резервное копирование', icon: 'HardDrive' },
+      { label: 'О приложении', icon: 'Info' },
     ],
   },
 ];
@@ -196,7 +195,7 @@ function ThemeDialog({
               >
                 {themeModeLabels[option]}
               </AppText>
-              {selected && <Icon name="checkmark" />}
+              {selected && <AppIcon name="Check" />}
             </Pressable>
           );
         })}

@@ -1,10 +1,9 @@
 import { Tabs } from 'expo-router';
-import type { SFSymbol } from 'expo-symbols';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ComingSoonProvider } from '@/components/coming-soon';
-import { Icon } from '@/components/icon';
+import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { sectionTitles } from '@/constants/sections';
 import { SelectedDateProvider } from '@/features/calendar/selected-date';
 import { PwaProvider } from '@/features/pwa/pwa-status';
@@ -14,12 +13,12 @@ import { radii, touchSize, typography, useAppTheme } from '@/theme';
 import { NavigationAppearance } from '@/theme/navigation-appearance';
 
 const tabIcons = {
-  index: 'house',
-  nutrition: 'fork.knife',
-  workouts: 'dumbbell',
-  progress: 'chart.xyaxis.line',
-  profile: 'person',
-} satisfies Record<keyof typeof sectionTitles, SFSymbol>;
+  index: 'House',
+  nutrition: 'Utensils',
+  workouts: 'Dumbbell',
+  progress: 'ChartNoAxesCombined',
+  profile: 'UserRound',
+} satisfies Record<keyof typeof sectionTitles, AppIconName>;
 
 export default function TabLayout() {
   return (
@@ -79,7 +78,7 @@ function AppTabs() {
                   focused && { backgroundColor: colors.accent },
                 ]}
               >
-                <Icon
+                <AppIcon
                   name={tabIcons[name]}
                   color={focused ? colors.onAccent : colors.muted}
                   size={19}

@@ -1,4 +1,3 @@
-import type { SFSymbol } from 'expo-symbols';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/components/app-text';
@@ -7,7 +6,7 @@ import { Card } from '@/components/card';
 import { useComingSoon } from '@/components/coming-soon';
 import { DateSelector } from '@/components/date-selector';
 import { AppHeader, SectionHeader } from '@/components/headers';
-import { Icon } from '@/components/icon';
+import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { EmptyState, StatCard } from '@/components/info-cards';
 import { MacroProgressBar } from '@/components/progress-indicators';
 import { ScreenContainer } from '@/components/screen-container';
@@ -23,11 +22,11 @@ import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 import { CalorieCard } from './calorie-card';
 import { demoLabel, demoTraining, demoWeight, getDemoDay } from './demo-data';
 
-const quickActions: readonly { label: string; icon: SFSymbol }[] = [
-  { label: 'Добавить еду', icon: 'fork.knife' },
-  { label: 'Записать вес', icon: 'scalemass' },
-  { label: 'Добавить воду', icon: 'drop' },
-  { label: 'Начать тренировку', icon: 'play.fill' },
+const quickActions: readonly { label: string; icon: AppIconName }[] = [
+  { label: 'Добавить еду', icon: 'Utensils' },
+  { label: 'Записать вес', icon: 'Scale' },
+  { label: 'Добавить воду', icon: 'Droplet' },
+  { label: 'Начать тренировку', icon: 'Play' },
 ];
 
 export function TodayScreen() {
@@ -65,7 +64,7 @@ export function TodayScreen() {
       >
         <StatCard
           label="Текущий вес"
-          icon="scalemass"
+          icon="Scale"
           value={`${formatNumber(demoWeight.current)} кг`}
           detail={`Цель ${formatNumber(demoWeight.goal)} кг`}
         />
@@ -73,7 +72,7 @@ export function TodayScreen() {
           <MacroProgressBar label="Вода" {...day.water} tone="water" />
           <IconButton
             label="Добавить воду"
-            icon="plus"
+            icon="Plus"
             onPress={() => showComingSoon('Добавить воду')}
           />
         </Card>
@@ -87,12 +86,12 @@ export function TodayScreen() {
               ? demoTraining.description
               : 'На выбранную дату тренировок нет.'
           }
-          icon="dumbbell"
+          icon="Dumbbell"
           action={
             isToday ? (
               <IconButton
                 label="Начать тренировку"
-                icon="play.fill"
+                icon="Play"
                 onPress={() => showComingSoon('Начать тренировку')}
               />
             ) : undefined
@@ -117,7 +116,7 @@ export function TodayScreen() {
                 fontScale > 1.5 && styles.fullAction,
               ]}
             >
-              <Icon name={icon} size={19} />
+              <AppIcon name={icon} size={19} />
               <AppText variant="action" style={styles.actionLabel}>
                 {label}
               </AppText>

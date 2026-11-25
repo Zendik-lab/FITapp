@@ -52,12 +52,12 @@ export function ProgressScreen() {
         <View style={styles.stats}>
           <StatCard
             label="Текущий вес"
-            icon="scalemass"
+            icon="Scale"
             value={`${formatNumber(demoWeight.current)} кг`}
           />
           <StatCard
             label="Целевой вес"
-            icon="scope"
+            icon="Target"
             value={`${formatNumber(demoWeight.goal)} кг`}
           />
         </View>
@@ -118,7 +118,7 @@ export function ProgressScreen() {
       </View>
       <PrimaryButton
         label="Добавить измерение"
-        icon="plus"
+        icon="Plus"
         onPress={() => showComingSoon('Добавить измерение')}
       />
       <View style={styles.group}>
@@ -126,7 +126,7 @@ export function ProgressScreen() {
         <EmptyState
           title="Пока нет замеров"
           description="Здесь появятся замеры тела."
-          icon="ruler"
+          icon="Ruler"
         />
       </View>
       <View style={styles.group}>
@@ -134,11 +134,11 @@ export function ProgressScreen() {
         <EmptyState
           title="Пока нет фотографий"
           description="Здесь появятся снимки прогресса."
-          icon="photo.on.rectangle"
+          icon="Images"
           action={
             <IconButton
               label="Добавить фотографию"
-              icon="plus"
+              icon="Plus"
               onPress={() => showComingSoon('Добавить фотографию')}
             />
           }

@@ -1,10 +1,9 @@
-import type { SFSymbol } from 'expo-symbols';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 
 import { AppText } from './app-text';
-import { Icon } from './icon';
+import { AppIcon, type AppIconName } from './app-icon';
 
 type Action = { label: string; onPress: () => void; disabled?: boolean };
 
@@ -15,7 +14,7 @@ export function PrimaryButton({
   icon,
   secondary = false,
 }: Action & {
-  icon?: SFSymbol;
+  icon?: AppIconName;
   secondary?: boolean;
 }) {
   const { colors } = useAppTheme();
@@ -33,7 +32,7 @@ export function PrimaryButton({
         },
       ]}
     >
-      {icon && <Icon name={icon} size={17} color={colors[tone]} />}
+      {icon && <AppIcon name={icon} size={17} color={colors[tone]} />}
       <AppText variant="action" tone={tone} style={styles.label}>
         {label}
       </AppText>
@@ -48,7 +47,7 @@ export function IconButton({
   icon,
   compact = false,
 }: Action & {
-  icon: SFSymbol;
+  icon: AppIconName;
   compact?: boolean;
 }) {
   const { colors } = useAppTheme();
@@ -66,7 +65,7 @@ export function IconButton({
         },
       ]}
     >
-      <Icon name={icon} size={compact ? 16 : 20} />
+      <AppIcon name={icon} size={compact ? 16 : 20} />
     </Pressable>
   );
 }

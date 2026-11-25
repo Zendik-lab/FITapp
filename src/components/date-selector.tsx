@@ -42,7 +42,7 @@ export function DateSelector({
       <View style={styles.controls}>
         <IconButton
           label="Предыдущая неделя"
-          icon="chevron.left"
+          icon="ChevronLeft"
           onPress={() => onChange(addDays(date, -7))}
           compact
         />
@@ -62,7 +62,7 @@ export function DateSelector({
         </Pressable>
         <IconButton
           label="Следующая неделя"
-          icon="chevron.right"
+          icon="ChevronRight"
           onPress={() => onChange(addDays(date, 7))}
           compact
         />

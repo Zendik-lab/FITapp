@@ -6,7 +6,7 @@ import { Card } from '@/components/card';
 import { useComingSoon } from '@/components/coming-soon';
 import { DateSelector } from '@/components/date-selector';
 import { AppHeader, SectionHeader } from '@/components/headers';
-import { Icon } from '@/components/icon';
+import { AppIcon } from '@/components/app-icon';
 import { EmptyState } from '@/components/info-cards';
 import { ScreenContainer } from '@/components/screen-container';
 import { sectionTitles } from '@/constants/sections';
@@ -31,12 +31,12 @@ export function NutritionScreen() {
           <View style={styles.buttons}>
             <IconButton
               label="Поиск продуктов"
-              icon="magnifyingglass"
+              icon="Search"
               onPress={() => showComingSoon('Поиск продуктов')}
             />
             <IconButton
               label="Сканировать штрихкод"
-              icon="barcode.viewfinder"
+              icon="Barcode"
               onPress={() => showComingSoon('Сканировать штрихкод')}
             />
           </View>
@@ -54,7 +54,7 @@ export function NutritionScreen() {
         {!isToday && <AppText tone="muted">Записей нет</AppText>}
         {day.meals.map(({ title, calories, example, icon }) => (
           <Card key={title} style={styles.meal}>
-            <Icon name={icon} size={19} />
+            <AppIcon name={icon} size={19} />
             <View style={styles.mealDetails}>
               <AppText variant="action">{title}</AppText>
               {example && (
@@ -65,7 +65,7 @@ export function NutritionScreen() {
             </View>
             <IconButton
               label={`Добавить продукт, ${title.toLocaleLowerCase('ru')}`}
-              icon="plus"
+              icon="Plus"
               onPress={() => showComingSoon('Добавить продукт')}
             />
           </Card>
@@ -74,11 +74,11 @@ export function NutritionScreen() {
       <EmptyState
         title="Рецепты"
         description="Здесь появятся ваши блюда."
-        icon="book.closed"
+        icon="BookOpen"
         action={
           <IconButton
             label="Открыть рецепты"
-            icon="chevron.right"
+            icon="ChevronRight"
             onPress={() => showComingSoon('Рецепты')}
           />
         }

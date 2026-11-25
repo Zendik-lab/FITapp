@@ -1,4 +1,3 @@
-import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -6,7 +5,7 @@ import { radii, spacing, useAppTheme } from '@/theme';
 
 import { AppText } from './app-text';
 import { Card } from './card';
-import { Icon } from './icon';
+import { AppIcon, type AppIconName } from './app-icon';
 
 export function StatCard({
   label,
@@ -18,13 +17,13 @@ export function StatCard({
   label: string;
   value: string;
   detail?: string;
-  icon: SFSymbol;
+  icon: AppIconName;
   children?: ReactNode;
 }) {
   return (
     <Card style={styles.stat}>
       <View style={styles.heading}>
-        <Icon name={icon} size={17} />
+        <AppIcon name={icon} size={17} />
         <AppText variant="caption" tone="muted" style={styles.flexible}>
           {label}
         </AppText>
@@ -55,7 +54,7 @@ export function EmptyState({
 }: {
   title: string;
   description: string;
-  icon: SFSymbol;
+  icon: AppIconName;
   action?: ReactNode;
 }) {
   const { colors } = useAppTheme();
@@ -64,7 +63,7 @@ export function EmptyState({
       <View
         style={[styles.iconTile, { backgroundColor: colors.accentSurface }]}
       >
-        <Icon name={icon} />
+        <AppIcon name={icon} />
       </View>
       <View style={styles.flexible}>
         <AppText variant="action">{title}</AppText>

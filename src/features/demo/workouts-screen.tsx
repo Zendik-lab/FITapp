@@ -5,7 +5,7 @@ import { IconButton, PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
 import { useComingSoon } from '@/components/coming-soon';
 import { AppHeader, SectionHeader } from '@/components/headers';
-import { Icon } from '@/components/icon';
+import { AppIcon } from '@/components/app-icon';
 import { EmptyState, StatCard } from '@/components/info-cards';
 import { ScreenContainer } from '@/components/screen-container';
 import { sectionTitles } from '@/constants/sections';
@@ -36,12 +36,12 @@ export function WorkoutsScreen() {
             <View
               style={[styles.tile, { backgroundColor: colors.accentSurface }]}
             >
-              <Icon name="dumbbell" size={28} />
+              <AppIcon name="Dumbbell" size={28} />
             </View>
           </View>
           <PrimaryButton
             label="Начать тренировку"
-            icon="play.fill"
+            icon="Play"
             onPress={() => showComingSoon('Начать тренировку')}
           />
         </Card>
@@ -50,7 +50,7 @@ export function WorkoutsScreen() {
         label="На этой неделе"
         value={`${demoTraining.completed} из ${demoTraining.weeklyGoal}`}
         detail="Тренировок выполнено"
-        icon="checkmark.circle"
+        icon="CircleCheck"
       >
         <View accessible={false} style={styles.sessions}>
           {Array.from({ length: demoTraining.weeklyGoal }, (_, index) => (
@@ -74,11 +74,11 @@ export function WorkoutsScreen() {
         <EmptyState
           title="Тренировочные программы"
           description="Здесь появятся ваши планы."
-          icon="list.bullet.rectangle"
+          icon="List"
           action={
             <IconButton
               label="Открыть программы"
-              icon="chevron.right"
+              icon="ChevronRight"
               onPress={() => showComingSoon('Тренировочные программы')}
             />
           }
@@ -89,7 +89,7 @@ export function WorkoutsScreen() {
         <EmptyState
           title="Тренировок пока нет"
           description="Завершённые тренировки появятся здесь."
-          icon="clock.arrow.circlepath"
+          icon="History"
         />
       </View>
     </ScreenContainer>

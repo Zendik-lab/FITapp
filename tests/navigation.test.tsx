@@ -46,7 +46,8 @@ test('открывает «Сегодня» и переключает все п�
   expect(selectionAsync).toHaveBeenCalledTimes(5);
   await fireEvent.press(screen.getByLabelText('Сегодня'));
   expect(selectionAsync).toHaveBeenCalledTimes(5);
-});
+  // Five complete screens now render real SVG trees in the native test renderer.
+}, 15000);
 
 test('переносит выбранную дату между разделами и показывает статус будущих функций', async () => {
   await renderRouter('./app');

@@ -1,10 +1,9 @@
-import type { SFSymbol } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { spacing, touchSize, useAppTheme } from '@/theme';
 
 import { AppText } from './app-text';
-import { Icon } from './icon';
+import { AppIcon, type AppIconName } from './app-icon';
 
 export function SettingsRow({
   label,
@@ -14,7 +13,7 @@ export function SettingsRow({
   onPress,
 }: {
   label: string;
-  icon: SFSymbol;
+  icon: AppIconName;
   value?: string;
   divider?: boolean;
   onPress: () => void;
@@ -30,7 +29,7 @@ export function SettingsRow({
         { backgroundColor: pressed ? colors.accentSurface : colors.surface },
       ]}
     >
-      <Icon name={icon} size={19} />
+      <AppIcon name={icon} size={19} />
       <View
         style={[
           styles.content,
@@ -48,7 +47,7 @@ export function SettingsRow({
             </AppText>
           )}
         </View>
-        <Icon name="chevron.right" size={12} color={colors.muted} />
+        <AppIcon name="ChevronRight" size={12} color={colors.muted} />
       </View>
     </Pressable>
   );

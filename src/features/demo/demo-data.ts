@@ -1,4 +1,4 @@
-import type { SFSymbol } from 'expo-symbols';
+import type { AppIconName } from '@/components/app-icon';
 
 export const demoLabel = 'Демонстрационные данные';
 
@@ -12,31 +12,31 @@ const sampleMeals: readonly {
   title: string;
   calories: number;
   example: string;
-  icon: SFSymbol;
+  icon: AppIconName;
 }[] = [
   {
     title: 'Завтрак',
     calories: 590,
     example: 'Овсянка с бананом и йогуртом',
-    icon: 'sunrise',
+    icon: 'Sunrise',
   },
   {
     title: 'Обед',
     calories: 760,
     example: 'Курица, рис и овощи',
-    icon: 'sun.max',
+    icon: 'Sun',
   },
   {
     title: 'Ужин',
     calories: 530,
     example: 'Паста с индейкой',
-    icon: 'moon.stars',
+    icon: 'MoonStar',
   },
   {
     title: 'Перекусы',
     calories: 260,
     example: 'Творог и ягоды',
-    icon: 'carrot',
+    icon: 'Carrot',
   },
 ];
 
