@@ -1,0 +1,85 @@
+# MassTracker
+
+Личное приложение для iPhone, которое по мере развития будет объединять набор мышечной массы, питание, тренировки и восстановление. Основной язык — русский, единицы измерения — метрические, валюта — казахстанский тенге (KZT).
+
+Основная версия — PWA для Safari на iPhone. После первого онлайн-запуска она открывается без сети и сохраняет настройки локально. Пять вкладок показывают демонстрационные показатели, общий календарь и график веса. Нативная версия доступна для дополнительной разработки через Expo Go.
+
+## Технологии
+
+- React Native, React, Expo SDK 58 и Expo Router.
+- TypeScript в строгом режиме.
+- IndexedDB в браузере и Expo SQLite на iOS через единый API настроек.
+- Service Worker, Web App Manifest и статический экспорт без серверного backend.
+- Expo Symbols для иконок, Expo Haptics на iOS и React Native SVG для графика и кольца.
+- ESLint, Prettier и Jest с jest-expo.
+
+## Окружение
+
+- Windows 11 и PowerShell.
+- Node.js 24 LTS (от 24.3) с npm. Другие совместимые версии указаны в `engines` файла `package.json`.
+- Для нативной проверки — физический iPhone с iOS 16.4 или новее, Expo Go для SDK 58 и учётная запись Expo.
+
+Если PowerShell блокирует `npm.ps1` или `npx.ps1`, используйте `npm.cmd` и `npx.cmd`. Если команд нет, добавьте папку установки Node.js в PATH текущего сеанса.
+
+Если Node.js установлен в переносимую папку MassTrackerTooling, подключите её к PATH.
+
+```powershell
+$env:Path = (Join-Path $env:LOCALAPPDATA 'MassTrackerTooling\node-v24.22.3-win-x64') + ';' + $env:Path
+```
+
+## Запуск PWA на Windows
+
+```powershell
+Set-Location -LiteralPath 'E:\123'
+npm.cmd ci
+npx.cmd expo start --web
+```
+
+Для проверки production остановите Metro и используйте отдельный статический сервер с поддержкой прямых маршрутов.
+
+```powershell
+npx.cmd expo export --platform web
+npx.cmd --yes serve@14.2.6 --single --listen 4174 --no-clipboard dist
+```
+
+Откройте `http://localhost:4174`. Инструкции по [проверке PWA, установке на iPhone и размещению на Cloudflare Pages](docs/PWA.md).
+
+## Запуск нативной версии
+
+Установите на iPhone Expo Go 58.0.5 с поддержкой SDK 58. [Expo Go в App Store](https://apps.apple.com/kz/app/expo-go/id982107779)
+
+```powershell
+Set-Location -LiteralPath 'E:\123'
+npm.cmd ci
+npx.cmd expo login
+npm.cmd run start -- --lan
+```
+
+На iPhone войдите в ту же учётную запись в Expo Go, подключитесь к той же сети Wi-Fi и отсканируйте QR-код приложением «Камера». Если LAN недоступна, остановите Metro сочетанием `Ctrl+C`, запустите его через туннель и отсканируйте новый код.
+
+```powershell
+npm.cmd run start -- --tunnel
+```
+
+## Проверки
+
+```powershell
+npx.cmd tsc --noEmit
+npx.cmd expo lint
+npx.cmd expo-doctor
+npm.cmd test
+npm.cmd run lint
+npm.cmd run format:check
+npx.cmd expo export --platform web
+npx.cmd expo export --platform ios --output-dir .expo/ios-check
+```
+
+Экспорт проверяет сборку JavaScript для iOS. Ручная приёмка на iPhone описана в [инструкции по проверке](docs/DEVELOPMENT.md#проверка-на-физическом-iphone).
+
+## Ограничения этапа 01.1
+
+- Примеры калорий, веса, воды и тренировок находятся в памяти. Настройка темы хранится локально в каждом окружении.
+- Запись еды, веса и тренировок, поиск по базе продуктов, сканирование штрихкода, расчёт пищевой ценности, профиль и интеграции относятся к следующим этапам. Кнопки этих функций открывают диалог.
+- Safari управляет сроком хранения IndexedDB и кеша. Полноценное резервное копирование запланировано на этап 15. Apple Health и виджеты отложены до возможной нативной сборки.
+
+См. [дизайн-систему](DESIGN.md), [дорожную карту](ROADMAP.md), [архитектуру](docs/ARCHITECTURE.md) и [схему БД](docs/DATABASE.md).

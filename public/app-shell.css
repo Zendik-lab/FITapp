@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light dark;
+  --app-background: #f2f2f7;
+  --focus-ring: #13642c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --app-background: #000;
+    --focus-ring: #66df83;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--app-background);
+}
+
+#root {
+  display: flex;
+  height: 100%;
+  height: var(--visual-viewport-height, 100dvh);
+  min-width: 0;
+}
+
+@media (display-mode: standalone) {
+  body::before {
+    position: fixed;
+    z-index: 10;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    background: #121c14;
+    pointer-events: none;
+    content: '';
+  }
+}
+
+input,
+textarea,
+select {
+  font-size: max(16px, 1em) !important;
+}
+
+:where(a, button, [role='button'], [role='radio'], [role='tab']):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.app-dialog {
+  box-sizing: border-box;
+  width: min(400px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  max-height: calc(
+    var(--visual-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
+      env(safe-area-inset-bottom, 0px) - 32px
+  );
+  padding: 0;
+  border: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.app-dialog::backdrop {
+  background: #0006;
+}

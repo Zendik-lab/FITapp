@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "MassTracker",
+    "slug": "masstracker",
+    "scheme": "masstracker",
+    "version": "0.1.0",
+    "platforms": ["ios", "web"],
+    "userInterfaceStyle": "automatic",
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "lang": "ru-KZ"
+    },
+    "plugins": ["expo-router", "expo-status-bar", "expo-sqlite"]
+  }
+}
