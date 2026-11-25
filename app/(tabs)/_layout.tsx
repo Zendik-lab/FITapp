@@ -9,6 +9,8 @@ import { SelectedDateProvider } from '@/features/calendar/selected-date';
 import { PwaProvider } from '@/features/pwa/pwa-status';
 import { tabFeedback } from '@/features/pwa/tab-feedback';
 import { StartupGate } from '@/features/startup/startup-gate';
+import { ProfileProvider } from '@/features/profile/profile-provider';
+import { OnboardingGate } from '@/features/profile/onboarding-screen';
 import { radii, touchSize, typography, useAppTheme } from '@/theme';
 import { NavigationAppearance } from '@/theme/navigation-appearance';
 
@@ -27,7 +29,11 @@ export default function TabLayout() {
         <SelectedDateProvider>
           <ComingSoonProvider>
             <PwaProvider>
-              <AppTabs />
+              <ProfileProvider>
+                <OnboardingGate>
+                  <AppTabs />
+                </OnboardingGate>
+              </ProfileProvider>
             </PwaProvider>
           </ComingSoonProvider>
         </SelectedDateProvider>

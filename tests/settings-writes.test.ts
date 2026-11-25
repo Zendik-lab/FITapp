@@ -28,3 +28,18 @@ test('ждёт активную запись и блокирует новые д
   resumeSettingsWrites();
   await expect(trackSettingsWrite(async () => {})).resolves.toBeUndefined();
 });
+
+test('не разрешает обновление, если принятая запись завершилась ошибкой', async () => {
+  let fail = (_error: Error) => {};
+  const write = trackSettingsWrite(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  const outcome = write.catch(() => {});
+  const paused = pauseSettingsWrites();
+  fail(new Error('disk full'));
+  await outcome;
+  await expect(paused).rejects.toThrow(/сохранить/);
+});

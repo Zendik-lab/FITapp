@@ -21,6 +21,8 @@ import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 
 import { CalorieCard } from './calorie-card';
 import { demoLabel, demoTraining, demoWeight, getDemoDay } from './demo-data';
+import { useProfile } from '@/features/profile/profile-context';
+import { goalLabels } from '@/features/profile/options';
 
 const quickActions: readonly { label: string; icon: AppIconName }[] = [
   { label: 'Добавить еду', icon: 'Utensils' },
@@ -30,6 +32,7 @@ const quickActions: readonly { label: string; icon: AppIconName }[] = [
 ];
 
 export function TodayScreen() {
+  const profile = useProfile()?.state.profile;
   const { colors } = useAppTheme();
   const { fontScale, width } = useWindowDimensions();
   const { today, selectedDate, selectDate } = useSelectedDate();
@@ -47,14 +50,29 @@ export function TodayScreen() {
             weekday: 'long',
           }).toLocaleUpperCase('ru')}
         </AppText>
-        <AppHeader title={sectionTitles.index} subtitle="Привет!" />
+        <AppHeader
+          title={sectionTitles.index}
+          subtitle={profile ? `Привет, ${profile.personal.name}!` : 'Привет!'}
+        />
       </View>
       <DateSelector date={selectedDate} today={today} onChange={selectDate} />
       <View style={styles.group}>
-        <AppText variant="caption" tone="muted">
-          {demoLabel}
-        </AppText>
-        <CalorieCard day={day} dominant />
+        {profile ? (
+          <Card>
+            <SectionHeader title="Калории и БЖУ" />
+            <AppText tone="muted">
+              Пока не рассчитаны. Персональные расчёты появятся на следующем
+              этапе.
+            </AppText>
+          </Card>
+        ) : (
+          <>
+            <AppText variant="caption" tone="muted">
+              {demoLabel}
+            </AppText>
+            <CalorieCard day={day} dominant />
+          </>
+        )}
       </View>
       <View
         style={[
@@ -65,8 +83,8 @@ export function TodayScreen() {
         <StatCard
           label="Текущий вес"
           icon="Scale"
-          value={`${formatNumber(demoWeight.current)} кг`}
-          detail={`Цель ${formatNumber(demoWeight.goal)} кг`}
+          value={`${formatNumber(profile?.body.currentWeightKg ?? demoWeight.current)} кг`}
+          detail={`Цель ${formatNumber(profile?.goals.targetWeightKg ?? demoWeight.goal)} кг`}
         />
         <Card style={styles.water}>
           <MacroProgressBar label="Вода" {...day.water} tone="water" />
@@ -77,6 +95,28 @@ export function TodayScreen() {
           />
         </Card>
       </View>
+      {profile && (
+        <Card>
+          <SectionHeader title={goalLabels[profile.goals.kind]} />
+          <AppText>
+            До целевого веса:{' '}
+            {formatNumber(
+              Math.abs(
+                profile.goals.targetWeightKg - profile.body.currentWeightKg,
+              ),
+            )}{' '}
+            кг
+          </AppText>
+          <AppText variant="caption" tone="muted">
+            Вес указан в профиле. Дневник веса появится позже.
+          </AppText>
+        </Card>
+      )}
+      {profile && (
+        <AppText variant="caption" tone="muted">
+          {demoLabel}: вода и тренировки
+        </AppText>
+      )}
       <View style={styles.group}>
         <SectionHeader title="Тренировка" />
         <EmptyState

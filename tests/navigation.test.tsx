@@ -3,6 +3,12 @@ import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
 import { saveThemeMode } from '@/features/settings/save-theme-mode';
 import { initializeApp } from '@/features/startup/initialize-app';
+import { getSettingsStorage } from '@/database/settings-storage';
+import { memoryStorage } from './fixtures/profile';
+
+jest.mock('@/database/settings-storage', () => ({
+  getSettingsStorage: jest.fn(),
+}));
 
 jest.mock('@/features/startup/initialize-app', () => ({
   initializeApp: jest.fn(),
@@ -16,7 +22,8 @@ jest.mock('expo-haptics', () => ({
   selectionAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
-beforeEach(() => {
+beforeEach(async () => {
+  jest.mocked(getSettingsStorage).mockResolvedValue(await memoryStorage());
   jest.mocked(selectionAsync).mockClear();
   jest.mocked(initializeApp).mockResolvedValue({
     locale: 'ru-KZ',

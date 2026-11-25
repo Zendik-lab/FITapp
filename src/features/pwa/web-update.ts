@@ -4,9 +4,8 @@ import {
 } from '@/database/settings-writes';
 
 export async function activateUpdate(worker: ServiceWorker) {
-  await pauseSettingsWrites();
-
   try {
+    await pauseSettingsWrites();
     await new Promise<void>((resolve, reject) => {
       const serviceWorkers = navigator.serviceWorker;
       const channel = new MessageChannel();

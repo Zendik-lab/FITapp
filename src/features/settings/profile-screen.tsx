@@ -17,6 +17,10 @@ import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 
 import { themeModeLabels, type ThemeMode } from './app-settings';
 import { AppSettingsContext } from './app-settings-context';
+import { useProfile } from '@/features/profile/profile-context';
+import { ProfileSections } from '@/features/profile/profile-sections';
+import { ProfileEditor } from '@/features/profile/profile-editor';
+import type { ProfileSection } from '@/features/profile/model';
 
 const themeOptions = [
   'system',
@@ -40,7 +44,7 @@ const sections: readonly {
     ],
   },
   {
-    title: 'Приложение',
+    title: 'Настройки приложения',
     rows: [
       { label: appearance, icon: 'Contrast' },
       { label: 'Уведомления', icon: 'Bell' },
@@ -61,11 +65,37 @@ export function ProfileScreen() {
   const appSettings = use(AppSettingsContext);
   const showComingSoon = useComingSoon();
   const [showTheme, setShowTheme] = useState(false);
+  const session = useProfile();
+  const [editing, setEditing] = useState<ProfileSection>();
+  const [updated, setUpdated] = useState(false);
   if (!appSettings) throw new Error('Не подключён AppSettingsProvider.');
+
+  if (editing && session?.state.profile)
+    return (
+      <ProfileEditor
+        profile={session.state.profile}
+        section={editing}
+        onClose={(saved) => {
+          setEditing(undefined);
+          setUpdated(saved);
+        }}
+      />
+    );
 
   return (
     <ScreenContainer>
       <AppHeader title={sectionTitles.profile} />
+      {updated && (
+        <AppText tone="accentText" accessibilityLiveRegion="polite">
+          Профиль обновлён.
+        </AppText>
+      )}
+      <ProfileSections
+        onEdit={(section) => {
+          setUpdated(false);
+          setEditing(section);
+        }}
+      />
       {appSettings.storageRecovery && (
         <Card>
           <SectionHeader title="Локальное хранилище" />
@@ -84,31 +114,35 @@ export function ProfileScreen() {
           />
         </Card>
       )}
-      {sections.map(({ title, rows }) => (
-        <View key={title} style={styles.group}>
-          <SectionHeader title={title} />
-          <Card style={styles.settings}>
-            {rows.map(({ label, icon }, index) => (
-              <SettingsRow
-                key={label}
-                label={label}
-                icon={icon}
-                divider={index > 0}
-                value={
-                  label === appearance
-                    ? themeModeLabels[appSettings.settings.themeMode]
-                    : undefined
-                }
-                onPress={() =>
-                  label === appearance
-                    ? setShowTheme(true)
-                    : showComingSoon(label)
-                }
-              />
-            ))}
-          </Card>
-        </View>
-      ))}
+      {sections
+        .filter(
+          ({ title }) => !session?.state.profile || title !== 'Профиль и цели',
+        )
+        .map(({ title, rows }) => (
+          <View key={title} style={styles.group}>
+            <SectionHeader title={title} />
+            <Card style={styles.settings}>
+              {rows.map(({ label, icon }, index) => (
+                <SettingsRow
+                  key={label}
+                  label={label}
+                  icon={icon}
+                  divider={index > 0}
+                  value={
+                    label === appearance
+                      ? themeModeLabels[appSettings.settings.themeMode]
+                      : undefined
+                  }
+                  onPress={() =>
+                    label === appearance
+                      ? setShowTheme(true)
+                      : showComingSoon(label)
+                  }
+                />
+              ))}
+            </Card>
+          </View>
+        ))}
       <InstallAppSection />
       {showTheme && (
         <ThemeDialog

@@ -172,7 +172,9 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function PwaNotices() {
+export function PwaNotices({
+  blockUpdate = false,
+}: { blockUpdate?: boolean } = {}) {
   const pwa = use(PwaContext);
   if (!pwa) return null;
 
@@ -193,10 +195,15 @@ export function PwaNotices() {
           <AppText accessibilityRole="status">Доступна новая версия</AppText>
           <PrimaryButton
             label={pwa.updating ? 'Обновление…' : 'Обновить'}
-            disabled={pwa.updating}
+            disabled={pwa.updating || blockUpdate}
             onPress={() => void pwa.applyUpdate()}
             secondary
           />
+          {blockUpdate && (
+            <AppText tone="muted">
+              Сохраните изменения перед обновлением.
+            </AppText>
+          )}
           {pwa.updateError && (
             <AppText tone="error" accessibilityRole="alert">
               {pwa.updateError}

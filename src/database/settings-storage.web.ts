@@ -16,6 +16,13 @@ const migrations = [
     store.add({ key: 'units', value: 'metric', updatedAt } satisfies Setting);
     store.add({ key: 'currency', value: 'KZT', updatedAt } satisfies Setting);
   },
+  (_database: IDBDatabase, transaction: IDBTransaction) => {
+    transaction.objectStore(storeName).add({
+      key: 'user_state_schema',
+      value: '1',
+      updatedAt: new Date().toISOString(),
+    } satisfies Setting);
+  },
 ];
 
 let connection: Promise<SettingsStorage> | undefined;
@@ -77,7 +84,7 @@ export function openIndexedDbSettings(
         }
         try {
           for (const migrate of migrations.slice(oldVersion))
-            migrate(request.result);
+            migrate(request.result, request.transaction!);
         } catch (error) {
           upgradeFailure = error;
           request.transaction?.abort();

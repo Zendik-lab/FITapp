@@ -10,6 +10,7 @@ import {
 import { join, resolve, sep } from 'node:path';
 import { createStaticServer } from '../../scripts/serve-web.cjs';
 import { generateServiceWorker } from '../../scripts/pwa-export.cjs';
+import { sampleDraft } from '../fixtures/profile';
 
 type Site = {
   url: string;
@@ -46,6 +47,12 @@ const test = base.extend<{ site: Site }>({
       },
     };
     const server = createStaticServer(output, (req, res) => {
+      if (req.url === '/__test-profile-setup') {
+        res
+          .writeHead(200, { 'Content-Type': 'text/html' })
+          .end('<!doctype html><title>Test setup</title>');
+        return true;
+      }
       if (site.failWorker && req.url === '/sw.js') {
         site.workerFailures += 1;
         res.writeHead(503).end('Temporary failure');
@@ -77,6 +84,54 @@ const test = base.extend<{ site: Site }>({
   },
 });
 
+async function seedCompletedProfile(page: Page, site: Site) {
+  // Start with a returning user; these tests exercise the existing PWA workflow.
+  // A blank same-origin response avoids registering a Service Worker during setup.
+  await page.goto(`${site.url}/__test-profile-setup`);
+  await page.evaluate(
+    (draft) =>
+      new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('masstracker', 2);
+        request.onupgradeneeded = () => {
+          request.result.createObjectStore('app_settings', { keyPath: 'key' });
+        };
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction('app_settings', 'readwrite');
+          const store = transaction.objectStore('app_settings');
+          store.put({
+            key: 'user_state',
+            value: JSON.stringify({
+              version: 1,
+              profile: draft,
+              onboarding: { completed: true, step: 7, draft },
+            }),
+            updatedAt: new Date().toISOString(),
+          });
+          store.put({
+            key: 'user_state_schema',
+            value: '1',
+            updatedAt: new Date().toISOString(),
+          });
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+          transaction.onabort = () => {
+            database.close();
+            reject(transaction.error);
+          };
+        };
+      }),
+    sampleDraft,
+  );
+}
+
+test.beforeEach(async ({ page, site }) => {
+  await seedCompletedProfile(page, site);
+});
+
 async function ready(page: Page) {
   await expect(
     page.getByText('Доступно без интернета', { exact: true }),
@@ -87,7 +142,7 @@ async function setting(page: Page, key: string, value?: string) {
   return page.evaluate(
     ({ key, value }) =>
       new Promise<string | null>((resolve, reject) => {
-        const request = indexedDB.open('masstracker', 1);
+        const request = indexedDB.open('masstracker');
         request.onerror = () => reject(request.error);
         request.onsuccess = () => {
           const database = request.result;
@@ -321,6 +376,7 @@ test('холодный запуск после полного перезапус
     .launchPersistentContext(profile, options);
   try {
     let page = persistent.pages()[0] ?? (await persistent.newPage());
+    await seedCompletedProfile(page, site);
     await page.goto(`${site.url}/profile`);
     await ready(page);
     await selectTheme(page, 'Тёмная');

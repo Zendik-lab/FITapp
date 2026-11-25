@@ -1,0 +1,14 @@
+# Контракты интерфейса MassTracker
+
+Web radio использует общий `RadioGroup`: пробел выбирает вариант, стрелки перемещают фокус и выбор, один radio входит в Tab-порядок; checked передаётся явно через aria-checked.
+
+Визуальные токены: DESIGN.md → src/theme/index.ts. Общие компоненты сохраняют темы, русский язык и ширину 640 pt.
+
+| Возможность | Владелец                                                                  | Поведение                                                                                                                            | Проверка                                                                                          |
+| ----------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Форма       | `src/components/form-controls.tsx` и `src/features/profile/validation.ts` | Общие поля и правила анкеты / редактирования; ошибки рядом с полями; сохранение только после commit                                  | `tests/profile-validation.test.ts`, `tests/onboarding.test.tsx`, `tests/e2e/profile-flow.spec.ts` |
+| Дата        | `FormField` и `ageFromBirthDate`                                          | Типизированный текст ДД.ММ.ГГГГ, без popup; возраст по локальному календарю                                                          | `tests/profile-validation.test.ts`                                                                |
+| Выбор       | `ChoiceGroup`                                                             | Видимые radio-карточки, нажатие / клавиатурная активация, подпись и состояние checked; без Select/Listbox                            | `tests/e2e/profile-flow.spec.ts`                                                                  |
+| Create/edit | `ProfileProvider`, `ProfileEditor`                                        | Новый пользователь → анкета → commit → Сегодня; правка раздела → commit → Профиль; ошибка сохраняет форму, повторная запись доступна | `tests/onboarding.test.tsx`, `tests/e2e/profile-flow.spec.ts`                                     |
+| Черновик    | `createProfileRepository`, `SettingsStorage`                              | Ввод и шаг сохраняются; последний подтверждённый снимок восстанавливается; обновление ждёт очередь                                   | `tests/profile-storage.test.ts`, `tests/settings-writes.test.ts`                                  |
+| Диалог      | `src/components/dialog.tsx` / `.web.tsx`                                  | Подтверждение повторной анкеты / отмены правок; возврат фокуса и Escape на web                                                       | `tests/e2e/profile-flow.spec.ts`                                                                  |

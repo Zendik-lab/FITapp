@@ -1,10 +1,17 @@
 const pendingWrites = new Set<Promise<void>>();
 let paused = false;
+let queue: Promise<void> | undefined;
 
 export async function trackSettingsWrite(write: () => Promise<void>) {
   if (paused) throw new Error('Выполняется обновление приложения.');
 
-  const operation = write();
+  // Reserve every accepted write immediately, including writes queued behind I/O.
+  const operation = queue ? queue.then(write) : write();
+  const settled = operation.catch(() => {});
+  queue = settled;
+  void settled.then(() => {
+    if (queue === settled) queue = undefined;
+  });
   pendingWrites.add(operation);
   try {
     await operation;
@@ -15,7 +22,13 @@ export async function trackSettingsWrite(write: () => Promise<void>) {
 
 export async function pauseSettingsWrites() {
   paused = true;
-  await Promise.allSettled(pendingWrites);
+  const results = await Promise.allSettled(pendingWrites);
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure?.status === 'rejected')
+    throw new Error(
+      'Не удалось сохранить изменения. Повторите сохранение перед обновлением.',
+      { cause: failure.reason },
+    );
 }
 
 export function resumeSettingsWrites() {
