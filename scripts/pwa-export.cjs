@@ -1,78 +1,97 @@
+/* global __dirname */
 const { createHash } = require('node:crypto');
-const { readFileSync, readdirSync } = require('node:fs');
+const { readFileSync, readdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
-function listPublicFiles(directory, prefix = '') {
+function listFiles(directory, prefix = '') {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.name.startsWith('_') || entry.name.startsWith('.')) return [];
+    // _expo contains required chunks; other underscored files are host config.
+    if (
+      entry.name.startsWith('.') ||
+      (!prefix && entry.name.startsWith('_') && entry.name !== '_expo')
+    )
+      return [];
     const path = `${prefix}${entry.name}`;
-    return entry.isDirectory()
-      ? listPublicFiles(join(directory, entry.name), `${path}/`)
+    if (entry.isDirectory())
+      return listFiles(join(directory, entry.name), `${path}/`);
+    return /(?:^|\/)(?:sw.js|precache-manifest.json|metadata.json)$|\.map$/.test(
+      path,
+    )
+      ? []
       : [path];
   });
 }
 
-function webAssetPath(asset, scale) {
-  // Match Expo's web export convention for Metro's asset locations and scales.
-  const directory = asset.httpServerLocation
-    .replace(/^\/assets\?export_path=/, '')
-    .replace(/^\/+/, '')
-    .replace(/\.\.\//g, '_');
-  return `${directory}/${asset.name}${scale === 1 ? '' : `@${scale}x`}.${asset.type}`;
-}
-
-function addServiceWorker(bundle, root) {
-  const files = new Map();
-  for (const { filename, type, source } of bundle.artifacts) {
-    if (type !== 'map' && type !== 'css-external') files.set(filename, source);
-  }
-  for (const asset of bundle.assets) {
-    asset.scales.forEach((scale, index) => {
-      files.set(webAssetPath(asset, scale), readFileSync(asset.files[index]));
-    });
-  }
-  const publicRoot = join(root, 'public');
-  for (const path of listPublicFiles(publicRoot)) {
-    files.set(path, readFileSync(join(publicRoot, path)));
-  }
-
-  const worker = readFileSync(join(root, 'scripts/service-worker.js'), 'utf8');
-  const hash = createHash('sha256')
-    .update(worker)
-    .update(readFileSync(join(root, 'app.json')));
-  const resources = [];
-  for (const path of Array.from(files.keys()).sort()) {
-    hash.update(path).update('\0').update(files.get(path)).update('\0');
-    if (path !== 'index.html') {
-      const url =
-        '/' +
+function resourceUrl(path) {
+  return path === 'index.html'
+    ? '/'
+    : '/' +
         path
           .split('/')
           .map((part) => encodeURIComponent(part).replaceAll('%40', '@'))
           .join('/');
-      const checksum = createHash('sha256')
-        .update(files.get(path))
-        .digest('base64');
-      resources.push([url, `sha256-${checksum}`]);
-    }
-  }
-
-  const build = {
-    version: hash.update(JSON.stringify(resources)).digest('hex').slice(0, 20),
-    resources,
-  };
-  return {
-    ...bundle,
-    artifacts: [
-      ...bundle.artifacts,
-      {
-        filename: 'sw.js',
-        type: 'asset',
-        source: worker.replace('/* @expo-build */ null', JSON.stringify(build)),
-        metadata: {},
-      },
-    ],
-  };
 }
 
-module.exports = { addServiceWorker };
+function validateReferences(files) {
+  const origin = 'https://masstracker.invalid';
+  function check(reference, parent) {
+    if (/^(data:|#)/.test(reference)) return;
+    const url = new URL(reference, origin + parent);
+    if (url.origin !== origin)
+      throw new Error(`Critical external resource: ${reference}`);
+    if (!files.has(url.pathname))
+      throw new Error(`Missing PWA resource: ${reference} in ${parent}`);
+  }
+  const html = files.get('/')?.toString();
+  if (!html || !/<script\b[^>]*\bsrc=/.test(html))
+    throw new Error('Missing exported HTML or entry script');
+  for (const [, reference] of html.matchAll(
+    /<(?:script|link|img|source)\b[^>]*\b(?:src|href)=["']([^"']+)["']/g,
+  ))
+    check(reference, '/');
+  for (const [url, bytes] of files) {
+    if (url.endsWith('.css')) {
+      for (const [, reference] of bytes
+        .toString()
+        .matchAll(/url\(["']?([^\s)'"\s]+)["']?\)/g))
+        check(reference, url);
+    }
+  }
+  const manifest = files.get('/manifest.webmanifest');
+  if (manifest) {
+    for (const icon of JSON.parse(manifest).icons ?? [])
+      check(icon.src, '/manifest.webmanifest');
+  }
+}
+
+function generateServiceWorker(directory) {
+  const files = new Map(
+    listFiles(directory)
+      .sort()
+      .map((path) => [resourceUrl(path), readFileSync(join(directory, path))]),
+  );
+  validateReferences(files);
+  const worker = readFileSync(join(__dirname, 'service-worker.js'), 'utf8');
+  const hash = createHash('sha256').update(worker);
+  const resources = [...files]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([url, bytes]) => {
+      hash.update(url).update('\0').update(bytes).update('\0');
+      return [
+        url,
+        `sha256-${createHash('sha256').update(bytes).digest('base64')}`,
+      ];
+    });
+  const build = { version: hash.digest('hex').slice(0, 20), resources };
+  writeFileSync(
+    join(directory, 'sw.js'),
+    worker.replace('/* @expo-build */ null', JSON.stringify(build)),
+  );
+  writeFileSync(
+    join(directory, 'precache-manifest.json'),
+    JSON.stringify(build, null, 2) + '\n',
+  );
+  return build;
+}
+
+module.exports = { generateServiceWorker };

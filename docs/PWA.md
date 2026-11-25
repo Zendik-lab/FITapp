@@ -7,13 +7,15 @@ PWA для iPhone — основная платформа с этапа 01.1. П
 ## Локальная production-проверка
 
 ```powershell
-Set-Location -LiteralPath 'E:\123'
+Set-Location -LiteralPath 'D:\FitApp'
 npm.cmd ci
-npx.cmd expo export --platform web
-npx.cmd --yes serve@14.2.6 --single --listen 4174 --no-clipboard dist
+npm.cmd run build:web
+npm.cmd run serve:web
 ```
 
-Откройте `http://localhost:4174` в браузере на этом же компьютере. Loopback HTTP поддерживает Service Worker. Используйте отдельный порт для Metro, который запускается командой `npx.cmd expo start --web`. `expo serve` из SDK 58 отдаёт 404 для прямых маршрутов экспорта `single`, поэтому локальная инструкция использует `serve --single` с SPA fallback.
+Откройте `http://127.0.0.1:4174` в браузере на этом же компьютере. Loopback HTTP поддерживает Service Worker. `serve:web` запускает статический сервер с SPA fallback и правильным MIME для manifest, JavaScript, CSS и изображений. Используйте отдельный origin для Metro. На Linux команды те же без `.cmd`. Сначала выполните всю сборку: `expo export` сам по себе больше не создаёт Service Worker.
+
+Для автоматизированной проверки выполните `npx playwright install chromium webkit`, затем `npm run test:offline`. Тесты поднимают собственный статический HTTP-сервер на свободном порту, проверяют Cache Storage и используют отдельные профили, включая полный перезапуск браузера без сети. Если используете установленный Edge вместо Chromium, в PowerShell задайте `$env:PLAYWRIGHT_CHROMIUM_CHANNEL = 'msedge'`. Playwright WebKit с параметрами iPhone не заменяет физическое устройство.
 
 1. В новом профиле браузера проверьте прямые открытия `/`, `/nutrition`, `/workouts`, `/progress`, `/profile`, обновление каждой страницы и навигацию между вкладками.
 2. В инструментах разработчика проверьте manifest, четыре PNG по ссылкам из HTML и manifest, работающий Service Worker `/sw.js` со scope `/` и кеш с префиксом `masstracker-app-`. В кеше должны быть документы, JS, CSS и изображения. SVG-иконки входят в JS и не требуют шрифта. Ресурсы зависимостей находятся в `/assets/vendor/`. В профиле появится «Доступно без интернета».
@@ -26,11 +28,11 @@ npx.cmd --yes serve@14.2.6 --single --listen 4174 --no-clipboard dist
 
 1. После согласования публикации создайте репозиторий GitHub и отправьте туда исходники с `package-lock.json`. Сборка использует исходники, а `dist` и локальные данные исключены через `.gitignore`.
 2. В Cloudflare откройте **Workers & Pages → Create application → Pages → Connect to Git**. Авторизуйте доступ к репозиторию и выберите его. Используйте тариф Free и стандартный домен `pages.dev`. [Интеграция с Git](https://developers.cloudflare.com/pages/get-started/git-integration/).
-3. Выберите ветку `main` или фактическую production-ветку, пресет **None**, команду `npx expo export --platform web` и выходной каталог `dist`. Корень сборки совпадает с корнем репозитория. Для совпадения с локальной средой можно задать `NODE_VERSION=24.22.3`. [Настройки сборки](https://developers.cloudflare.com/pages/configuration/build-configuration/) · [Версии Node.js](https://developers.cloudflare.com/pages/configuration/build-image/).
+3. Выберите ветку `main` или фактическую production-ветку, пресет **None**, команду **`npm run build:web`** и выходной каталог **`dist`**. Корень сборки совпадает с корнем репозитория. Используйте совместимую версию Node.js из `engines` в `package.json`. Команда запускает экспорт Expo, затем проверяет локальные ссылки и генерирует `sw.js` и `precache-manifest.json` по окончательным файлам. [Настройки сборки](https://developers.cloudflare.com/pages/configuration/build-configuration/) · [Версии Node.js](https://developers.cloudflare.com/pages/configuration/build-image/).
 4. После сборки откройте выданный HTTPS-адрес. Отсутствие `404.html` позволяет Pages использовать встроенный SPA fallback для прямых ссылок. `public/_headers` попадает в `dist` и задаёт типы содержимого и правила кеширования. Проверьте, что `/profile` возвращает HTML с кодом 200, `/sw.js` отдаёт JavaScript с `Cache-Control: no-cache`, а `/manifest.webmanifest` имеет тип `application/manifest+json`. Путь `/_expo/static/` отдаёт сборочные ресурсы с неизменяемым хешированным URL. [Выдача статических файлов](https://developers.cloudflare.com/pages/configuration/serving-pages/) · [Заголовки Pages](https://developers.cloudflare.com/pages/configuration/headers/).
 5. Проверьте установку и офлайн-режим с итогового домена. Используйте этот же домен для обновлений, так как IndexedDB хранится отдельно для каждого origin.
 
-Cloudflare Pages исключает каталоги `node_modules`, в том числе внутри `dist/assets/`. Metro-плагин автоматически использует `assets/vendor/` для production-ресурсов. Не переносите их обратно в `node_modules` и не удаляйте их из precache. Команда сборки остаётся `npx expo export --platform web`; дополнительная ручная обработка `dist` не нужна. [Описание исключений Cloudflare](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/#ignoring-assets).
+Cloudflare Pages исключает каталоги `node_modules`, в том числе внутри `dist/assets/`. Metro-плагин автоматически использует `assets/vendor/` для production-ресурсов. Не переносите их обратно в `node_modules` и не удаляйте их из precache. Генерация после экспорта выполняется автоматически внутри `npm run build:web`. [Описание исключений Cloudflare](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/#ignoring-assets).
 
 На опубликованном origin проверьте, что URL из `sw.js` возвращают реальные JS/PNG/CSS с нужным типом, а не HTML с кодом 200 из SPA fallback. В `document.fonts` не должно быть Material Symbols. После повторной согласованной публикации старая PWA должна предложить обновление; не очищайте данные сайта и не переустанавливайте приложение для сброса кеша. [Отчёт HOTFIX 01.1](HOTFIX-01.1-ICONS.md).
 
@@ -40,7 +42,7 @@ Cloudflare Pages исключает каталоги `node_modules`, в том �
 2. Нажмите «Поделиться». В некоторых версиях Safari эта кнопка находится в меню страницы.
 3. Выберите «На экран Домой». Если пункта нет, проверьте список действий в меню «Поделиться».
 4. Включите «Открывать как веб-приложение», если переключатель доступен, и нажмите «Добавить».
-5. Откройте значок MassTracker с домашнего экрана при доступной сети. В профиле дождитесь «Доступно без интернета». [Установка веб-приложения на iPhone](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios).
+5. Откройте значок MassTracker с домашнего экрана при доступной сети. В профиле **именно этого окна** дождитесь «Доступно без интернета». Готовность вкладки Safari не подтверждает подготовку отдельного окружения standalone. Пока отображается «Готовим офлайн-режим…», оставьте приложение открытым. При ошибке верните сеть и нажмите «Подготовить офлайн-режим». [Установка веб-приложения на iPhone](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios).
 
 ## Проверка на iPhone
 
@@ -60,7 +62,7 @@ Cloudflare Pages исключает каталоги `node_modules`, в том �
 
 ## Результаты проверок этапа 01.1
 
-Актуальные результаты исправления иконок приведены в [отчёте HOTFIX 01.1](HOTFIX-01.1-ICONS.md). Следующая таблица относится к предыдущей проверке этапа 01.1, до замены шрифтовых иконок на SVG.
+Актуальный механизм, диагностика production, браузерные проверки и ограничения приведены в [HOTFIX 01.1 — Complete PWA Offline Mode](HOTFIX-01.1-OFFLINE.md). Отдельно сохранён [отчёт об иконках](HOTFIX-01.1-ICONS.md). Следующая таблица историческая: она относится к предыдущей проверке этапа 01.1, до замены шрифтовых иконок на SVG и переноса генерации SW после экспорта.
 
 | Проверка                                                      | Результат                                                                                                                                                                                                                                                           |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -30,7 +30,7 @@ $env:Path = (Join-Path $env:LOCALAPPDATA 'MassTrackerTooling\node-v24.22.3-win-x
 ## Запуск PWA на Windows
 
 ```powershell
-Set-Location -LiteralPath 'E:\123'
+Set-Location -LiteralPath 'D:\FitApp'
 npm.cmd ci
 npx.cmd expo start --web
 ```
@@ -38,11 +38,13 @@ npx.cmd expo start --web
 Для проверки production остановите Metro и используйте отдельный статический сервер с поддержкой прямых маршрутов.
 
 ```powershell
-npx.cmd expo export --platform web
-npx.cmd --yes serve@14.2.6 --single --listen 4174 --no-clipboard dist
+npm.cmd run build:web
+npm.cmd run serve:web
 ```
 
-Откройте `http://localhost:4174`. Инструкции по [проверке PWA, установке на iPhone и размещению на Cloudflare Pages](docs/PWA.md).
+Откройте `http://127.0.0.1:4174`. В Cloudflare Pages используйте **`npm run build:web`**, выходной каталог **`dist`**. Эта команда экспортирует Expo, затем генерирует Service Worker и `precache-manifest.json` из готовых файлов. Отдельного `expo export` для PWA теперь недостаточно. Скрипты используют Node.js без команд конкретной ОС; на Linux команды запускаются без суффикса `.cmd`.
+
+В профиле именно установленного приложения дождитесь «Доступно без интернета»: статус появляется после проверки всех ресурсов кеша активным Service Worker. При сбое подготовка повторяется с возвращением сети или по кнопке. Инструкции по [проверке PWA, установке на iPhone и размещению на Cloudflare Pages](docs/PWA.md). [Диагностика и результаты HOTFIX Offline](docs/HOTFIX-01.1-OFFLINE.md).
 
 [HOTFIX 01.1: причина исчезновения иконок, исправленные пути ресурсов и результаты проверок](docs/HOTFIX-01.1-ICONS.md).
 
@@ -72,7 +74,9 @@ npx.cmd expo-doctor
 npm.cmd test
 npm.cmd run lint
 npm.cmd run format:check
-npx.cmd expo export --platform web
+npm.cmd run build:web
+npx.cmd playwright install chromium webkit
+npm.cmd run test:offline
 npx.cmd expo export --platform ios --output-dir .expo/ios-check
 ```
 

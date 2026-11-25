@@ -15,10 +15,16 @@ import { SectionHeader } from '@/components/headers';
 import { useAppTheme } from '@/theme';
 
 import { activateUpdate } from './web-update';
+import {
+  observeOfflineSupport,
+  type OfflinePreparation,
+} from './offline-support';
 
 const PwaContext = createContext<{
   offline: boolean;
   ready: boolean;
+  preparation: OfflinePreparation;
+  prepareOffline: () => void;
   updateAvailable: boolean;
   updating: boolean;
   updateError?: string;
@@ -63,7 +69,9 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     () => false,
   );
   const standalone = useStandalone();
-  const [ready, setReady] = useState(false);
+  const [preparation, setPreparation] =
+    useState<OfflinePreparation>('unavailable');
+  const prepareOffline = useRef<() => void>(() => {});
   const [update, setUpdate] = useState<ServiceWorker | null>(null);
   const [updateError, setUpdateError] = useState<string>();
   const [updating, setUpdating] = useState(false);
@@ -120,63 +128,11 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     if (__DEV__ || !window.isSecureContext || !('serviceWorker' in navigator))
       return;
 
-    const workers = navigator.serviceWorker;
-    let registration: ServiceWorkerRegistration | undefined;
-    let installing: ServiceWorker | null = null;
-    let mounted = true;
-
-    function sync() {
-      setReady(Boolean(workers.controller));
-      setUpdate(workers.controller ? (registration?.waiting ?? null) : null);
-    }
-
-    function watchInstall() {
-      installing?.removeEventListener('statechange', sync);
-      installing = registration?.installing ?? null;
-      installing?.addEventListener('statechange', sync);
-      sync();
-    }
-
-    function checkForUpdate() {
-      if (document.visibilityState === 'visible' && navigator.onLine) {
-        void registration?.update().catch(() => {
-          // Connectivity can change between the browser event and the request.
-        });
-      }
-    }
-
-    workers.addEventListener('controllerchange', sync);
-    document.addEventListener('visibilitychange', checkForUpdate);
-    window.addEventListener('online', checkForUpdate);
-    const checks = setInterval(checkForUpdate, 60 * 60 * 1000);
-    void workers
-      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
-      .then(
-        (result) => {
-          if (!mounted) return;
-          registration = result;
-          registration.addEventListener('updatefound', watchInstall);
-          watchInstall();
-        },
-        (error: unknown) => {
-          if (mounted && navigator.onLine && !workers.controller) {
-            console.warn(
-              '[MassTracker] Не удалось подготовить офлайн-режим',
-              error,
-            );
-          }
-        },
-      );
-    sync();
-
+    const support = observeOfflineSupport(setPreparation, setUpdate);
+    prepareOffline.current = support.prepare;
     return () => {
-      mounted = false;
-      clearInterval(checks);
-      installing?.removeEventListener('statechange', sync);
-      registration?.removeEventListener('updatefound', watchInstall);
-      workers.removeEventListener('controllerchange', sync);
-      document.removeEventListener('visibilitychange', checkForUpdate);
-      window.removeEventListener('online', checkForUpdate);
+      prepareOffline.current = () => {};
+      support.dispose();
     };
   }, []);
 
@@ -202,7 +158,9 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     <PwaContext
       value={{
         offline,
-        ready,
+        ready: preparation === 'ready',
+        preparation,
+        prepareOffline: () => prepareOffline.current(),
         updateAvailable: Boolean(update),
         updating,
         updateError,
@@ -271,10 +229,36 @@ export function InstallAppSection() {
         </>
       )}
       {pwa?.ready && (
-        <AppText variant="caption" tone="muted">
+        <AppText variant="caption" tone="muted" accessibilityRole="status">
           Доступно без интернета
         </AppText>
       )}
+      {pwa &&
+        !pwa.ready &&
+        !__DEV__ &&
+        window.isSecureContext &&
+        'serviceWorker' in navigator && (
+          <>
+            <AppText
+              variant="caption"
+              tone="muted"
+              accessibilityRole="status"
+              accessibilityLiveRegion="polite"
+            >
+              {pwa.preparation === 'preparing'
+                ? 'Готовим офлайн-режим…'
+                : 'Офлайн-режим ещё не готов. Подключитесь к интернету и повторите подготовку.'}
+            </AppText>
+            {pwa.preparation === 'unavailable' && (
+              <PrimaryButton
+                label="Подготовить офлайн-режим"
+                secondary
+                disabled={pwa.offline}
+                onPress={pwa.prepareOffline}
+              />
+            )}
+          </>
+        )}
     </Card>
   );
 }
