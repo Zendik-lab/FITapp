@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { spacing, useAppTheme } from '@/theme';
-import { PwaNotices } from '@/features/pwa/pwa-status';
+import { PwaNotices, useUpdateBlocker } from '@/features/pwa/pwa-status';
 import { FormDisabledContext } from './form-controls';
 
 export function FormScreen({
@@ -26,6 +26,7 @@ export function FormScreen({
   disabled?: boolean;
   blockUpdate?: boolean;
 }) {
+  useUpdateBlocker();
   const { colors, isDark } = useAppTheme();
   const [opacity] = useState(() => new Animated.Value(1));
   useEffect(() => {

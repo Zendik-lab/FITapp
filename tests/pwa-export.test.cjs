@@ -82,3 +82,19 @@ test('сохраняет URL ресурсов scoped-пакетов с @', () =>
     generateServiceWorker(directory).resources.map(([url]) => url),
   ).toContain('/assets/@local/icon.svg');
 });
+
+test('публикует согласованные идентификаторы HTML, worker и version.json', () => {
+  const build = generateServiceWorker(directory, {
+    buildId: '1234567890abcdef1234',
+  });
+  expect(build.version).toBe('1234567890abcdef1234');
+  const version = JSON.parse(
+    readFileSync(join(directory, 'version.json'), 'utf8'),
+  );
+  expect(version).toEqual({ buildId: build.version, appVersion: '0.1.0' });
+  expect(readFileSync(join(directory, 'index.html'), 'utf8')).toContain(
+    `<meta name="app-build" content="${build.version}">`,
+  );
+  expect(build.resources.some(([url]) => url === '/version.json')).toBe(false);
+  expect(generateServiceWorker(directory).version).not.toBe(build.version);
+});

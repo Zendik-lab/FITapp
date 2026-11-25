@@ -1,6 +1,7 @@
 /* global __dirname */
 const { spawnSync } = require('node:child_process');
 const { resolve } = require('node:path');
+const { randomBytes } = require('node:crypto');
 const { generateServiceWorker } = require('./pwa-export.cjs');
 
 const root = resolve(__dirname, '..');
@@ -11,7 +12,9 @@ const result = spawnSync(
 );
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
-const build = generateServiceWorker(resolve(root, 'dist'));
+const build = generateServiceWorker(resolve(root, 'dist'), {
+  buildId: randomBytes(10).toString('hex'),
+});
 console.log(
   `PWA ${build.version}: ${build.resources.length} resources (including HTML) verified for precache.`,
 );

@@ -2,10 +2,37 @@ import {
   pauseSettingsWrites,
   resumeSettingsWrites,
 } from '@/database/settings-writes';
+import { currentBuild } from './build-info';
+import { isUpdateBlocked } from './update-safety';
+import { readWorkerStatus } from './worker-status';
+
+function assertSafeToUpdate() {
+  if (
+    isUpdateBlocked() ||
+    document.activeElement?.matches('input, textarea, [contenteditable="true"]')
+  )
+    throw new Error(
+      'Завершите заполнение формы и сохраните изменения перед обновлением.',
+    );
+}
 
 export async function activateUpdate(worker: ServiceWorker) {
   try {
+    assertSafeToUpdate();
+    const target = await readWorkerStatus(worker);
+    if (!target.ready)
+      throw new Error(
+        'Обновление ещё не загружено полностью. Повторите проверку.',
+      );
+    const reloadKey = 'masstracker:last-update-reload';
+    if (window.sessionStorage.getItem(reloadKey) === target.version)
+      throw new Error(
+        'Повторная перезагрузка этой сборки остановлена. Закройте и снова откройте приложение.',
+      );
+    if (target.version === currentBuild().buildId)
+      throw new Error('Эта версия уже установлена.');
     await pauseSettingsWrites();
+    assertSafeToUpdate();
     await new Promise<void>((resolve, reject) => {
       const serviceWorkers = navigator.serviceWorker;
       const channel = new MessageChannel();
@@ -39,6 +66,12 @@ export async function activateUpdate(worker: ServiceWorker) {
             ),
           );
         }
+        if (data === 'not-ready')
+          finish(
+            new Error(
+              'Обновление ещё не готово для работы без интернета. Повторите проверку.',
+            ),
+          );
       };
 
       if (serviceWorkers.controller === worker) finish();
@@ -52,6 +85,8 @@ export async function activateUpdate(worker: ServiceWorker) {
         }
       }
     });
+    assertSafeToUpdate();
+    window.sessionStorage.setItem(reloadKey, target.version);
     window.location.reload();
   } catch (error) {
     resumeSettingsWrites();

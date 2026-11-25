@@ -11,6 +11,7 @@ import { join, resolve, sep } from 'node:path';
 import { createStaticServer } from '../../scripts/serve-web.cjs';
 import { generateServiceWorker } from '../../scripts/pwa-export.cjs';
 import { sampleDraft } from '../fixtures/profile';
+import { createHash } from 'node:crypto';
 
 type Site = {
   url: string;
@@ -18,7 +19,15 @@ type Site = {
   failWorker: boolean;
   workerFailures: number;
   corruptResource: string;
+  htmlRequests: number;
+  failVersion: boolean;
+  versionRequests: number;
+  deployOnWorker: string;
+  holdResource: string;
+  heldRequests: number;
+  releaseResource: () => void;
   deploy: (label: string) => string;
+  deployExport: (directory: string) => string;
 };
 
 // The server can fail a real SW request; browser routing cannot intercept SW fetches.
@@ -27,13 +36,22 @@ const test = base.extend<{ site: Site }>({
     void baseURL;
     const root = mkdtempSync(join(resolve('.expo'), 'offline-test-'));
     const output = join(root, 'site');
-    cpSync('dist', output, { recursive: true });
+    cpSync(process.env.PWA_INITIAL_BUILD_DIR ?? 'dist', output, {
+      recursive: true,
+    });
     const site: Site = {
       url: '',
       root,
       failWorker: false,
       workerFailures: 0,
       corruptResource: '',
+      htmlRequests: 0,
+      failVersion: false,
+      versionRequests: 0,
+      deployOnWorker: '',
+      holdResource: '',
+      heldRequests: 0,
+      releaseResource: () => {},
       deploy(label) {
         const file = join(output, 'index.html');
         writeFileSync(
@@ -45,8 +63,44 @@ const test = base.extend<{ site: Site }>({
         );
         return generateServiceWorker(output).version;
       },
+      deployExport(directory) {
+        if (
+          !output.startsWith(root + sep) ||
+          !root.startsWith(resolve('.expo') + sep)
+        )
+          throw new Error('Unsafe export swap');
+        rmSync(output, { recursive: true, force: true });
+        cpSync(directory, output, { recursive: true });
+        return (
+          JSON.parse(readFileSync(join(output, 'version.json'), 'utf8')) as {
+            buildId: string;
+          }
+        ).buildId;
+      },
     };
     const server = createStaticServer(output, (req, res) => {
+      if (req.url === site.holdResource) {
+        site.heldRequests += 1;
+        return new Promise<boolean>((resolve) => {
+          site.releaseResource = () => {
+            site.holdResource = '';
+            resolve(false);
+          };
+        });
+      }
+      if (req.url === '/sw.js' && site.deployOnWorker) {
+        const label = site.deployOnWorker;
+        site.deployOnWorker = '';
+        site.deploy(label);
+      }
+      if (req.url === '/' || req.url === '/profile') site.htmlRequests += 1;
+      if (req.url === '/version.json') {
+        site.versionRequests += 1;
+        if (site.failVersion) {
+          res.writeHead(503).end('Unavailable');
+          return true;
+        }
+      }
       if (req.url === '/__test-profile-setup') {
         res
           .writeHead(200, { 'Content-Type': 'text/html' })
@@ -76,12 +130,379 @@ const test = base.extend<{ site: Site }>({
     try {
       await provide(site);
     } finally {
+      site.releaseResource();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       if (!root.startsWith(resolve('.expo') + sep))
         throw new Error('Unsafe test cleanup path');
       rmSync(root, { recursive: true, force: true });
     }
   },
+});
+
+test('проверяет HTML по сети, предлагает новую сборку и позволяет отложить обновление', async ({
+  page,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  const requests = site.htmlRequests;
+  await page.reload();
+  await ready(page);
+  expect(site.htmlRequests).toBeGreaterThan(requests);
+  const version = site.deploy('manual-update');
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await expect(
+    page.getByText('Доступна новая версия', { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Обновить', exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath('update-notice.png'),
+    fullPage: true,
+  });
+  await page.getByRole('button', { name: 'Позже', exact: true }).click();
+  await expect(
+    page.getByText('Доступна новая версия', { exact: true }),
+  ).toHaveCount(0);
+  await page.reload();
+  await ready(page);
+  // The previous shell stays internally coherent until consent.
+  await expect(page).toHaveTitle('MassTracker');
+  await expect(
+    page.getByText('Доступна новая версия', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker manual-update');
+  await ready(page);
+  await expect(
+    page.getByText(`Сборка ${version}`, { exact: true }),
+  ).toBeVisible();
+});
+
+test('после офлайн-правок и восстановления сети обновляет профиль и цели без потери данных и повторных reload', async ({
+  page,
+  context,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  await page.evaluate(() => localStorage.setItem('user-retained', 'yes'));
+  await context.setOffline(true);
+  await page.getByRole('button', { name: /^Личная информация,/ }).click();
+  await page.getByLabel('Имя', { exact: true }).fill('Офлайн Алекс');
+  await page
+    .getByRole('button', { name: 'Сохранить изменения', exact: true })
+    .click();
+  await page.getByRole('button', { name: /^Моя цель,/ }).click();
+  await page.getByLabel('Целевой вес, кг', { exact: true }).fill('79');
+  await page
+    .getByRole('button', { name: 'Сохранить изменения', exact: true })
+    .click();
+  const saved = await setting(page, 'user_state');
+  await page.reload();
+  await ready(page);
+  await expect(
+    page.getByRole('button', {
+      name: 'Личная информация, Офлайн Алекс',
+      exact: true,
+    }),
+  ).toBeVisible();
+  site.deploy('reconnected');
+  await context.setOffline(false);
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker reconnected');
+  await ready(page);
+  expect(await setting(page, 'user_state')).toBe(saved);
+  expect(await page.evaluate(() => localStorage.getItem('user-retained'))).toBe(
+    'yes',
+  );
+  let navigations = 0;
+  page.on('framenavigated', () => {
+    navigations += 1;
+  });
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await expect(
+    page.getByText('Установлена актуальная версия.', { exact: true }),
+  ).toBeVisible();
+  await context.setOffline(true);
+  await context.setOffline(false);
+  await expect(
+    page.getByText('Установлена актуальная версия.', { exact: true }),
+  ).toBeVisible();
+  expect(navigations).toBe(0);
+  await context.setOffline(true);
+  await page.reload();
+  await ready(page);
+  await page.getByRole('button', { name: /^Моя цель,/ }).click();
+  await expect(page.getByLabel('Целевой вес, кг', { exact: true })).toHaveValue(
+    '79',
+  );
+});
+
+test('возврат из фона обнаруживает новую сборку и блокирует обновление до выхода из формы', async ({
+  page,
+  context,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  await page.getByRole('button', { name: /^Личная информация,/ }).click();
+  await page.getByLabel('Имя', { exact: true }).fill('Новый Алекс');
+  site.deploy('resumed');
+  // OS suspension itself is device-only; dispatch its documented resume event.
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event('visibilitychange')),
+  );
+  await expect(
+    page.getByRole('button', { name: 'Обновить', exact: true }),
+  ).toBeDisabled();
+  await expect(page).toHaveTitle('MassTracker');
+  await expect(page.getByLabel('Имя', { exact: true })).toHaveValue(
+    'Новый Алекс',
+  );
+  await page
+    .getByRole('button', { name: 'Сохранить изменения', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Обновить', exact: true }),
+  ).toBeEnabled();
+  // Fully installed updates also apply while offline.
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker resumed');
+  await ready(page);
+  await expect(
+    page.getByRole('button', {
+      name: 'Личная информация, Новый Алекс',
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+test('при недоступности сервера сохраняет рабочую версию и повторяет проверку', async ({
+  page,
+  context,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  site.failVersion = true;
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      'Сервер не вернул сведения о версии. Текущая версия сохранена.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await context.setOffline(true);
+  await page.reload();
+  await ready(page);
+  site.failVersion = false;
+  site.failWorker = true;
+  site.deploy('retry');
+  await context.setOffline(false);
+  await expect.poll(() => site.workerFailures).toBeGreaterThan(0);
+  await expect(page).toHaveTitle('MassTracker');
+  site.failWorker = false;
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker retry');
+  await ready(page);
+});
+
+test('защита повторной перезагрузки оставляет текущую сборку доступной', async ({
+  page,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  const version = site.deploy('guarded');
+  await page.evaluate(
+    (version) =>
+      sessionStorage.setItem('masstracker:last-update-reload', version),
+    version,
+  );
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(
+    page.getByText(
+      'Повторная перезагрузка этой сборки остановлена. Закройте и снова откройте приложение.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page).toHaveTitle('MassTracker');
+  await selectTheme(page, 'Тёмная');
+  expect(await setting(page, 'theme_mode')).toBe('dark');
+});
+
+test('экспорт и HTTP-заголовки согласованы с хешами всех ресурсов', async ({
+  page,
+  site,
+}) => {
+  const metadata = await page.request.get(`${site.url}/version.json`);
+  expect(metadata.headers()['cache-control']).toBe(
+    'no-store, no-cache, must-revalidate, no-transform',
+  );
+  expect(metadata.headers()['content-type']).toContain('application/json');
+  const info = (await metadata.json()) as {
+    buildId: string;
+    appVersion: string;
+  };
+  const manifestResponse = await page.request.get(
+    `${site.url}/precache-manifest.json`,
+  );
+  expect(manifestResponse.headers()['cache-control']).toContain('no-store');
+  const manifest = (await manifestResponse.json()) as {
+    version: string;
+    resources: [string, string][];
+  };
+  expect(info.buildId).toBe(manifest.version);
+  const worker = await page.request.get(`${site.url}/sw.js`);
+  expect(worker.headers()['cache-control']).toBe(
+    'no-store, no-cache, must-revalidate, no-transform',
+  );
+  expect(worker.headers()['service-worker-allowed']).toBe('/');
+  expect(await worker.text()).toContain(`"version":"${info.buildId}"`);
+  for (const [path, integrity] of manifest.resources) {
+    const response = await page.request.get(site.url + path);
+    expect(response.ok(), path).toBe(true);
+    expect(
+      `sha256-${createHash('sha256')
+        .update(await response.body())
+        .digest('base64')}`,
+      path,
+    ).toBe(integrity);
+    if (path.startsWith('/_expo/static/')) {
+      expect(path).toMatch(/[a-f0-9]{32}\.(?:js|css)$/);
+      expect(response.headers()['cache-control']).toBe(
+        'public, max-age=31536000, immutable, no-transform',
+      );
+    } else
+      expect(response.headers()['cache-control']).toBe(
+        'no-cache, no-transform',
+      );
+  }
+  expect(manifest.resources.map(([path]) => path)).not.toContain(
+    '/version.json',
+  );
+});
+
+test('деплой между HTML и первой установкой worker предлагает безопасный переход на уже активную сборку', async ({
+  page,
+  site,
+}) => {
+  site.deployOnWorker = 'first-install-race';
+  await page.goto(`${site.url}/profile`);
+  await expect(
+    page.getByRole('button', { name: 'Обновить', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Доступно без интернета', { exact: true }),
+  ).toHaveCount(0);
+  await expect(page).toHaveTitle('MassTracker');
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker first-install-race');
+  await ready(page);
+});
+
+test('после офлайн-перезапуска предлагает уже загруженный waiting worker', async ({
+  page,
+  context,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  site.deploy('offline-waiting');
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Обновить', exact: true }),
+  ).toBeVisible();
+  await context.setOffline(true);
+  await page.reload();
+  await ready(page);
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker offline-waiting');
+  await ready(page);
+});
+
+test('активация ожидающей B не удаляет кеш одновременно устанавливаемой C', async ({
+  page,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  site.deploy('build-b');
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Обновить', exact: true }),
+  ).toBeVisible();
+  const successor = site.deploy('build-c');
+  site.holdResource = '/app-shell.css';
+  await page.evaluate(async () => {
+    void (await navigator.serviceWorker.getRegistration())?.update();
+  });
+  await expect.poll(() => site.heldRequests).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker build-b');
+  await ready(page);
+  expect(await page.evaluate(() => caches.keys())).toContain(
+    `masstracker-app-${successor}`,
+  );
+  site.releaseResource();
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker build-c');
+  await ready(page);
+});
+
+test('переходит между двумя production-экспортами с сохранением данных и offline', async ({
+  page,
+  context,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  const before = await page
+    .locator('meta[name="app-build"]')
+    .getAttribute('content');
+  const profile = await setting(page, 'user_state');
+  await setting(page, 'production-update-check', 'retained');
+  const next = process.env.PWA_UPDATE_BUILD_DIR
+    ? site.deployExport(process.env.PWA_UPDATE_BUILD_DIR)
+    : site.deploy('second-export');
+  expect(next).not.toBe(before);
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await ready(page);
+  await expect(page.locator('meta[name="app-build"]')).toHaveAttribute(
+    'content',
+    next,
+  );
+  expect(await setting(page, 'user_state')).toBe(profile);
+  expect(await setting(page, 'production-update-check')).toBe('retained');
+  await context.setOffline(true);
+  await page.reload();
+  await ready(page);
+  await expect(page.locator('meta[name="app-build"]')).toHaveAttribute(
+    'content',
+    next,
+  );
 });
 
 async function seedCompletedProfile(page: Page, site: Site) {

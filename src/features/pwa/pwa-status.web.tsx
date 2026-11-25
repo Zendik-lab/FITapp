@@ -2,6 +2,7 @@ import {
   createContext,
   use,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -15,9 +16,16 @@ import { SectionHeader } from '@/components/headers';
 import { useAppTheme } from '@/theme';
 
 import { activateUpdate } from './web-update';
+import { currentBuild } from './build-info';
+import {
+  blockUpdates,
+  isUpdateBlocked,
+  subscribeUpdateSafety,
+} from './update-safety';
 import {
   observeOfflineSupport,
   type OfflinePreparation,
+  type UpdateCheck,
 } from './offline-support';
 
 const PwaContext = createContext<{
@@ -28,6 +36,11 @@ const PwaContext = createContext<{
   updateAvailable: boolean;
   updating: boolean;
   updateError?: string;
+  check: UpdateCheck;
+  checkUpdates: () => void;
+  dismissUpdate: () => void;
+  noticeVisible: boolean;
+  blocked: boolean;
   applyUpdate: () => Promise<void>;
 } | null>(null);
 
@@ -73,6 +86,13 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     useState<OfflinePreparation>('unavailable');
   const prepareOffline = useRef<() => void>(() => {});
   const [update, setUpdate] = useState<ServiceWorker | null>(null);
+  const [dismissed, setDismissed] = useState<ServiceWorker | null>(null);
+  const [check, setCheck] = useState<UpdateCheck>({ state: 'idle' });
+  const blocked = useSyncExternalStore(
+    subscribeUpdateSafety,
+    isUpdateBlocked,
+    () => false,
+  );
   const [updateError, setUpdateError] = useState<string>();
   const [updating, setUpdating] = useState(false);
   const activeUpdate = useRef(false);
@@ -128,7 +148,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     if (__DEV__ || !window.isSecureContext || !('serviceWorker' in navigator))
       return;
 
-    const support = observeOfflineSupport(setPreparation, setUpdate);
+    const support = observeOfflineSupport(setPreparation, setUpdate, setCheck);
     prepareOffline.current = support.prepare;
     return () => {
       prepareOffline.current = () => {};
@@ -137,13 +157,14 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function applyUpdate() {
-    if (!update || activeUpdate.current) return;
+    if (!update || activeUpdate.current || isUpdateBlocked()) return;
     activeUpdate.current = true;
     setUpdating(true);
     setUpdateError(undefined);
     try {
       await activateUpdate(update);
     } catch (failure) {
+      setUpdate(update);
       activeUpdate.current = false;
       setUpdating(false);
       setUpdateError(
@@ -164,12 +185,25 @@ export function PwaProvider({ children }: { children: ReactNode }) {
         updateAvailable: Boolean(update),
         updating,
         updateError,
+        check,
+        checkUpdates: () => {
+          setDismissed(null);
+          setUpdateError(undefined);
+          prepareOffline.current();
+        },
+        dismissUpdate: () => setDismissed(update),
+        noticeVisible: Boolean(update && update !== dismissed),
+        blocked,
         applyUpdate,
       }}
     >
       {children}
     </PwaContext>
   );
+}
+
+export function useUpdateBlocker() {
+  useLayoutEffect(blockUpdates, []);
 }
 
 export function PwaNotices({
@@ -190,18 +224,25 @@ export function PwaNotices({
           Офлайн
         </AppText>
       )}
-      {(pwa.updateAvailable || pwa.updating) && (
+      {(pwa.noticeVisible || pwa.updating) && (
         <Card>
           <AppText accessibilityRole="status">Доступна новая версия</AppText>
           <PrimaryButton
             label={pwa.updating ? 'Обновление…' : 'Обновить'}
-            disabled={pwa.updating || blockUpdate}
+            disabled={pwa.updating || blockUpdate || pwa.blocked}
             onPress={() => void pwa.applyUpdate()}
             secondary
           />
-          {blockUpdate && (
+          <PrimaryButton
+            label="Позже"
+            secondary
+            disabled={pwa.updating}
+            onPress={pwa.dismissUpdate}
+          />
+          {(blockUpdate || pwa.blocked) && (
             <AppText tone="muted">
-              Сохраните изменения перед обновлением.
+              Завершите заполнение формы и сохраните изменения перед
+              обновлением.
             </AppText>
           )}
           {pwa.updateError && (
@@ -212,6 +253,55 @@ export function PwaNotices({
         </Card>
       )}
     </>
+  );
+}
+
+const checkLabels: Record<UpdateCheck['state'], string> = {
+  idle: '',
+  checking: 'Проверяем обновления…',
+  current: 'Установлена актуальная версия.',
+  available: 'Обновление готово к установке.',
+  downloading: 'Загружаем обновление…',
+  offline: 'Нет интернета. Проверим обновления после подключения.',
+  error: 'Не удалось проверить обновления. Повторите попытку.',
+};
+
+export function AppVersionSection() {
+  const pwa = use(PwaContext);
+  const info = currentBuild();
+  return (
+    <Card>
+      <SectionHeader title="Версия приложения" />
+      <AppText>{info.appVersion}</AppText>
+      <AppText variant="caption" tone="muted">
+        Сборка{' '}
+        {info.buildId === 'development' ? 'для разработки' : info.buildId}
+      </AppText>
+      <PrimaryButton
+        label="Проверить обновления"
+        secondary
+        disabled={
+          !pwa ||
+          pwa.updating ||
+          pwa.check.state === 'checking' ||
+          __DEV__ ||
+          typeof window === 'undefined' ||
+          !window.isSecureContext ||
+          !('serviceWorker' in navigator)
+        }
+        onPress={() => pwa?.checkUpdates()}
+      />
+      {pwa && pwa.check.state !== 'idle' && (
+        <AppText
+          variant="caption"
+          tone={pwa.check.state === 'error' ? 'error' : 'muted'}
+          accessibilityRole={pwa.check.state === 'error' ? 'alert' : 'status'}
+          accessibilityLiveRegion="polite"
+        >
+          {pwa.check.message ?? checkLabels[pwa.check.state]}
+        </AppText>
+      )}
+    </Card>
   );
 }
 

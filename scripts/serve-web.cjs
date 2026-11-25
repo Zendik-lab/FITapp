@@ -1,5 +1,6 @@
 const { createServer } = require('node:http');
 const { readFile } = require('node:fs/promises');
+const { readFileSync } = require('node:fs');
 const { resolve, extname, sep } = require('node:path');
 
 const types = {
@@ -17,10 +18,26 @@ const types = {
 
 /**
  * @param {string} directory
- * @param {(request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => boolean} [intercept]
+ * @param {(request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => boolean | Promise<boolean>} [intercept]
  */
 function createStaticServer(directory, intercept = () => false) {
   const root = resolve(directory);
+  // Mirror Pages' ordered _headers rules, including detach before override.
+  // This lets browser tests verify actual response headers of the export.
+  const rules = [];
+  for (const line of readFileSync(resolve(root, '_headers'), 'utf8').split(
+    /\r?\n/,
+  )) {
+    if (!line.trim() || line.trim().startsWith('#')) continue;
+    if (!/^\s/.test(line)) {
+      const pattern = line
+        .trim()
+        .split('*')
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('.*');
+      rules.push({ pattern: new RegExp(`^${pattern}$`), headers: [] });
+    } else if (rules.length) rules[rules.length - 1].headers.push(line.trim());
+  }
   return createServer(async (request, response) => {
     if (await intercept(request, response)) return;
     try {
@@ -49,15 +66,32 @@ function createStaticServer(directory, intercept = () => false) {
       }
       response
         .writeHead(200, {
-          'Content-Type': types[extension] ?? 'application/octet-stream',
-          'Cache-Control': 'no-cache, no-transform',
-          'X-Content-Type-Options': 'nosniff',
+          'content-type': types[extension] ?? 'application/octet-stream',
+          ...responseHeaders(pathname, rules),
         })
         .end(body);
     } catch {
       response.writeHead(500).end();
     }
   });
+}
+
+function responseHeaders(pathname, rules) {
+  const headers = {};
+  for (const rule of rules) {
+    if (!rule.pattern.test(pathname)) continue;
+    for (const line of rule.headers) {
+      if (line.startsWith('! ')) delete headers[line.slice(2).toLowerCase()];
+      else {
+        const colon = line.indexOf(':');
+        if (colon < 1) continue;
+        const name = line.slice(0, colon).toLowerCase();
+        const value = line.slice(colon + 1).trim();
+        headers[name] = headers[name] ? `${headers[name]}, ${value}` : value;
+      }
+    }
+  }
+  return headers;
 }
 
 if (require.main === module) {

@@ -9,6 +9,7 @@ const appRoutes = new Set([
   '/workouts',
   '/progress',
   '/profile',
+  '/index.html',
 ]);
 
 self.addEventListener('install', (event) => {
@@ -17,7 +18,16 @@ self.addEventListener('install', (event) => {
 
 async function precache() {
   try {
+    // Capture predecessors before this install. A successor may already be
+    // installing when this worker later leaves the waiting state.
+    const previous = (await caches.keys()).filter(
+      (key) => /^masstracker-app-[a-f0-9]{20}$/.test(key) && key !== cacheName,
+    );
     await fillCache();
+    await setShellHeader(
+      'X-MassTracker-Predecessors',
+      JSON.stringify(previous),
+    );
   } catch (error) {
     await caches.delete(cacheName);
     throw error;
@@ -79,19 +89,51 @@ async function offlineStatus() {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter(
-            (key) =>
-              /^masstracker-app-[a-f0-9]{20}$/.test(key) && key !== cacheName,
-          )
-          .map((key) => caches.delete(key)),
-      );
+      await fillCache();
       await self.clients.claim();
     })(),
   );
 });
+
+async function removeOldResourceCaches() {
+  const windows = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  });
+  if (windows.filter(({ url }) => isAppRoute(new URL(url).pathname)).length > 1)
+    return;
+  const shell = await fromBuild(shellPath);
+  const previous = JSON.parse(
+    shell?.headers.get('X-MassTracker-Predecessors') ?? '[]',
+  );
+  await Promise.all(
+    previous
+      .filter(
+        (key) =>
+          typeof key === 'string' &&
+          /^masstracker-app-[a-f0-9]{20}$/.test(key) &&
+          key !== cacheName,
+      )
+      .map((key) => caches.delete(key)),
+  );
+  if (previous.length) await setShellHeader('X-MassTracker-Predecessors', '[]');
+}
+
+async function setShellHeader(name, value) {
+  const cache = await caches.open(cacheName);
+  const shell = await cache.match(shellPath);
+  if (!shell) return;
+  const headers = new Headers(shell.headers);
+  headers.set(name, value);
+  await cache.put(
+    shellPath,
+    new Response(await shell.arrayBuffer(), {
+      status: shell.status,
+      statusText: shell.statusText,
+      headers,
+    }),
+  );
+}
 
 self.addEventListener('message', (event) => {
   if (
@@ -102,7 +144,18 @@ self.addEventListener('message', (event) => {
       (async () => {
         try {
           if (event.data.type === 'PREPARE_OFFLINE') await fillCache();
-          event.ports[0].postMessage(await offlineStatus());
+          const status = await offlineStatus();
+          event.ports[0].postMessage(status);
+          // A newly running app confirms its own HTML build before old caches
+          // can disappear. No storage outside our resource caches is touched.
+          if (
+            status.ready &&
+            event.data.buildId === build.version &&
+            event.source?.id &&
+            (await self.clients.get(event.source.id))
+          ) {
+            await removeOldResourceCaches();
+          }
         } catch {
           // Repair must never delete a working cache or touch IndexedDB.
           event.ports[0].postMessage({
@@ -123,6 +176,10 @@ self.addEventListener('message', (event) => {
     return;
   event.waitUntil(
     (async () => {
+      if (!(await offlineStatus()).ready) {
+        event.ports[0].postMessage('not-ready');
+        return;
+      }
       const windows = await self.clients.matchAll({
         type: 'window',
         includeUncontrolled: true,
@@ -146,35 +203,93 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
+  if (url.pathname === '/version.json') {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
   if (request.mode === 'navigate' && isAppRoute(url.pathname)) {
-    event.respondWith(navigate(request));
+    event.respondWith(navigate());
   } else if (
-    !url.search &&
+    (!url.search || /^\?app-build=[a-f0-9]{20}$/.test(url.search)) &&
     !request.headers.has('range') &&
-    resources.has(url.pathname)
+    (resources.has(url.pathname) ||
+      /[a-f0-9]{32}\.[a-z0-9]+$/i.test(url.pathname))
   ) {
     event.respondWith(
-      fromBuild(url.pathname)
-        .catch(() => undefined)
-        .then((response) => response ?? fetch(request)),
+      resourceForDocument(url).then(async (response) => {
+        if (response) return response;
+        if (
+          !resources.has(url.pathname) ||
+          (url.searchParams.has('app-build') &&
+            url.searchParams.get('app-build') !== build.version)
+        )
+          throw new Error(
+            `Resource belongs to a different PWA build: ${url.pathname}`,
+          );
+        const verified = await fetch(
+          new Request(url.pathname, {
+            cache: 'no-store',
+            redirect: 'error',
+            integrity: resources.get(url.pathname),
+          }),
+        );
+        if (!verified.ok)
+          throw new Error(`PWA resource unavailable: ${url.pathname}`);
+        const cache = await caches.open(cacheName);
+        await cache.put(url.pathname, verified.clone());
+        return verified;
+      }),
     );
   }
 });
+
+async function resourceForDocument(url) {
+  const version = url.searchParams.get('app-build');
+  if (version && version !== build.version) {
+    if (!(await caches.has(`${cachePrefix}${version}`))) return undefined;
+    return (await caches.open(`${cachePrefix}${version}`)).match(url.pathname);
+  }
+  const current = await fromBuild(url.pathname);
+  if (current || resources.has(url.pathname)) return current;
+  // Content-hashed resources are immutable. Keep old running windows usable
+  // during the narrow race between the activation check and clients.claim().
+  for (const key of await caches.keys()) {
+    if (!/^masstracker-app-[a-f0-9]{20}$/.test(key) || key === cacheName)
+      continue;
+    const response = await (await caches.open(key)).match(url.pathname);
+    if (response) return response;
+  }
+}
 
 async function fromBuild(path) {
   const cache = await caches.open(cacheName);
   return cache.match(path);
 }
 
-async function navigate(request) {
-  const shell = await fromBuild(shellPath).catch(() => undefined);
-  if (shell) return shell;
-
+async function navigate() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 4000);
   try {
-    return await fetch(request, { signal: controller.signal });
+    // Network first, but never hand an old worker a newer shell. SRI pins the
+    // network HTML to this build, just like JS, CSS and the offline fallback.
+    const response = await fetch(
+      new Request(shellPath, {
+        cache: 'no-store',
+        redirect: 'error',
+        integrity: resources.get(shellPath),
+        signal: controller.signal,
+      }),
+    );
+    if (!response.ok) throw new Error(`HTML unavailable: ${response.status}`);
+    if (!(await fromBuild(shellPath))) {
+      const cache = await caches.open(cacheName);
+      await cache.put(shellPath, response.clone());
+    }
+    return response;
   } catch {
+    const shell = await fromBuild(shellPath).catch(() => undefined);
+    if (shell) return shell;
     return new Response(
       '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MassTracker</title><main><h1>MassTracker</h1><p>Подключитесь к интернету, чтобы заново загрузить приложение.</p><a href="/">Повторить</a></main></html>',
       { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } },

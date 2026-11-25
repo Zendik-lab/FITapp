@@ -1,5 +1,6 @@
 /* global __dirname */
 const { createHash } = require('node:crypto');
+const { Buffer } = require('node:buffer');
 const { readFileSync, readdirSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
@@ -14,7 +15,7 @@ function listFiles(directory, prefix = '') {
     const path = `${prefix}${entry.name}`;
     if (entry.isDirectory())
       return listFiles(join(directory, entry.name), `${path}/`);
-    return /(?:^|\/)(?:sw.js|precache-manifest.json|metadata.json)$|\.map$/.test(
+    return /(?:^|\/)(?:sw.js|version.json|precache-manifest.json|metadata.json)$|\.map$/.test(
       path,
     )
       ? []
@@ -64,25 +65,59 @@ function validateReferences(files) {
   }
 }
 
-function generateServiceWorker(directory) {
+function generateServiceWorker(directory, { buildId } = {}) {
+  const appVersion = require('../package.json').version;
   const files = new Map(
     listFiles(directory)
       .sort()
       .map((path) => [resourceUrl(path), readFileSync(join(directory, path))]),
   );
+  // Remove our own metadata before hashing so regeneration is deterministic.
+  const html = files
+    .get('/')
+    ?.toString()
+    .replace(/<meta name="app-(?:build|version)" content="[^"]*">/g, '')
+    .replace(/\?app-build=[a-f0-9]{20}/g, '');
+  if (html) files.set('/', Buffer.from(html));
   validateReferences(files);
   const worker = readFileSync(join(__dirname, 'service-worker.js'), 'utf8');
   const hash = createHash('sha256').update(worker);
+  for (const [url, bytes] of files)
+    hash.update(url).update('\0').update(bytes).update('\0');
+  const version = buildId ?? hash.digest('hex').slice(0, 20);
+  if (!/^[a-f0-9]{20}$/.test(version)) throw new Error('Invalid build ID');
+  const metadata = `<meta name="app-build" content="${version}"><meta name="app-version" content="${appVersion}">`;
+  const withMetadata = /<head\b[^>]*>/.test(html)
+    ? html.replace(/<head\b[^>]*>/, (head) => head + metadata)
+    : metadata + html;
+  // Stable URLs such as app-shell.css must select the document's resource
+  // cache even if another window activates a newer worker mid-navigation.
+  const stampedHtml = withMetadata.replace(
+    /<(?:script|link|img|source)\b[^>]*>/g,
+    (tag) =>
+      tag.replace(
+        /((?:src|href)=["'])(\/[^"'?#]+)(["'])/g,
+        (reference, prefix, path, suffix) =>
+          /[a-f0-9]{32}\.[a-z0-9]+$/i.test(path)
+            ? reference
+            : `${prefix}${path}?app-build=${version}${suffix}`,
+      ),
+  );
+  writeFileSync(join(directory, 'index.html'), stampedHtml);
+  files.set('/', Buffer.from(stampedHtml));
   const resources = [...files]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([url, bytes]) => {
-      hash.update(url).update('\0').update(bytes).update('\0');
       return [
         url,
         `sha256-${createHash('sha256').update(bytes).digest('base64')}`,
       ];
     });
-  const build = { version: hash.digest('hex').slice(0, 20), resources };
+  const build = { version, appVersion, resources };
+  writeFileSync(
+    join(directory, 'version.json'),
+    JSON.stringify({ buildId: version, appVersion }) + '\n',
+  );
   writeFileSync(
     join(directory, 'sw.js'),
     worker.replace('/* @expo-build */ null', JSON.stringify(build)),

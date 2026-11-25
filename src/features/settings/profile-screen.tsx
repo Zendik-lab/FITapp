@@ -12,7 +12,11 @@ import { ScreenContainer } from '@/components/screen-container';
 import { SettingsRow } from '@/components/settings-row';
 import { sectionTitles } from '@/constants/sections';
 import { SettingsStorageError } from '@/database/settings-contract';
-import { InstallAppSection } from '@/features/pwa/pwa-status';
+import {
+  AppVersionSection,
+  InstallAppSection,
+  useUpdateBlocker,
+} from '@/features/pwa/pwa-status';
 import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 
 import { themeModeLabels, type ThemeMode } from './app-settings';
@@ -144,6 +148,7 @@ export function ProfileScreen() {
           </View>
         ))}
       <InstallAppSection />
+      <AppVersionSection />
       {showTheme && (
         <ThemeDialog
           mode={appSettings.settings.themeMode}
@@ -164,6 +169,7 @@ function ThemeDialog({
   onChange: (mode: ThemeMode) => Promise<void>;
   onDismiss: () => void;
 }) {
+  useUpdateBlocker();
   const { colors } = useAppTheme();
   const saving = useRef(false);
   const [pending, setPending] = useState(false);
