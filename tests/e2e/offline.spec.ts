@@ -857,7 +857,7 @@ test('холодный запуск после полного перезапус
         .getByRole('button', { name, exact: true })
         .and(page.locator(':not([inert] *)'));
     await page.getByRole('tab', { name: 'Питание', exact: true }).click();
-    await button('Мои рецепты').click();
+    await button('Рецепты').click();
     await button('Создать рецепт').click();
     await page
       .getByLabel('Название блюда', { exact: true })
@@ -893,7 +893,7 @@ test('холодный запуск после полного перезапус
     );
     expect(await setting(page, 'food_diary_state')).toBe(diary);
     await page.getByRole('tab', { name: 'Питание', exact: true }).click();
-    await button('Мои рецепты').click();
+    await button('Рецепты').click();
     await expect(button('Открыть: Банановый перекус')).toBeVisible();
     await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
     const afterBrowsing = site.deploy('after-recipe-list');
@@ -920,7 +920,7 @@ test('холодный запуск после полного перезапус
     expect(await setting(page, 'food_diary_state')).toBe(diary);
     await page.getByRole('tab', { name: 'Питание', exact: true }).click();
     await expect(button('Изменить запись: Банановый перекус')).toBeVisible();
-    await button('Мои рецепты').click();
+    await button('Рецепты').click();
     await expect(button('Открыть: Банановый перекус')).toBeVisible();
   } finally {
     await persistent.close();

@@ -1,9 +1,9 @@
 import { Platform } from 'react-native';
-import { validBarcode } from './domain';
+import { sameBarcode, validBarcode } from './domain';
 import type { FoodProduct } from './model';
 
 function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
@@ -68,40 +68,107 @@ type Request = (
   input: string,
   init?: RequestInit,
 ) => Promise<Pick<Response, 'ok' | 'status' | 'json'>>;
+
+type OffErrorKind =
+  | 'invalid-request'
+  | 'access-denied'
+  | 'rate-limit'
+  | 'unavailable'
+  | 'network'
+  | 'timeout'
+  | 'invalid-response'
+  | 'incomplete';
+
+class OffError extends Error {
+  constructor(
+    readonly kind: OffErrorKind,
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'OffError';
+  }
+}
+
+function httpError(status: number) {
+  if (status === 429)
+    return new OffError(
+      'rate-limit',
+      'Лимит Open Food Facts. Подождите минуту.',
+      status,
+    );
+  if (status === 401 || status === 403)
+    return new OffError(
+      'access-denied',
+      `Open Food Facts отклонил доступ (HTTP ${status}).`,
+      status,
+    );
+  if (status >= 400 && status < 500)
+    return new OffError(
+      'invalid-request',
+      `Open Food Facts отклонил запрос (HTTP ${status}).`,
+      status,
+    );
+  return new OffError(
+    'unavailable',
+    `Open Food Facts временно недоступен (HTTP ${status}).`,
+    status,
+  );
+}
+
+function invalidResponse() {
+  return new OffError(
+    'invalid-response',
+    'Open Food Facts вернул некорректный ответ.',
+  );
+}
+
+const origin = 'https://world.openfoodfacts.org';
 const fields =
   'code,product_name,product_name_ru,brands,categories,categories_tags,nutriments,nutrition_data_per,no_nutrition_data,serving_size,quantity,product_quantity_unit,image_front_small_url';
 export function createOffClient(
   request: Request = (input, init) => fetch(input, init),
 ) {
-  let lastSearch = 0;
-  async function get(url: string, signal?: AbortSignal): Promise<unknown> {
+  let lastSearch = -Infinity;
+  let recentBarcodes: number[] = [];
+  async function get(path: string, signal?: AbortSignal, allowMissing = false) {
+    if (signal?.aborted) throw new Error('Запрос отменён.');
     const controller = new AbortController();
     const abort = () => controller.abort();
-    if (signal?.aborted) controller.abort();
     signal?.addEventListener('abort', abort);
     const timer = setTimeout(abort, 10000);
     try {
-      const response = await request(url, {
-        signal: controller.signal,
-        headers:
-          Platform.OS === 'web'
-            ? {}
-            : { 'User-Agent': 'MassTracker/0.1 (personal nutrition diary)' },
-      });
-      if (!response.ok)
-        throw new Error(
-          response.status === 429
-            ? 'Лимит Open Food Facts. Подождите минуту.'
-            : 'Open Food Facts временно недоступен.',
-        );
-      return await response.json();
+      const response = await request(
+        `${origin}${path}&fields=${fields}&app_name=MassTracker`,
+        {
+          signal: controller.signal,
+          headers:
+            Platform.OS === 'web'
+              ? undefined
+              : {
+                  'User-Agent':
+                    'MassTracker/0.1 (https://fitapp-epj.pages.dev)',
+                },
+        },
+      );
+      if (!response.ok && !(allowMissing && response.status === 404)) {
+        throw httpError(response.status);
+      }
+      const json: unknown = await response.json();
+      if (controller.signal.aborted) throw new Error('Запрос отменён.');
+      return { json, status: response.status };
     } catch (error) {
       if (signal?.aborted) throw error;
       if (controller.signal.aborted)
-        throw new Error('Время ожидания истекло. Повторите поиск.');
+        throw new OffError(
+          'timeout',
+          'Время ожидания истекло. Повторите поиск.',
+        );
+      if (error instanceof SyntaxError) throw invalidResponse();
       if (error instanceof TypeError)
-        throw new Error(
-          'Нет связи с Open Food Facts. Проверьте интернет; локальные продукты доступны.',
+        throw new OffError(
+          'network',
+          'Сетевой запрос к Open Food Facts завершился ошибкой. Локальные продукты доступны.',
         );
       throw error;
     } finally {
@@ -111,20 +178,24 @@ export function createOffClient(
   }
   return {
     async search(query: string, signal?: AbortSignal) {
-      if (query.trim().length < 3)
-        throw new Error('Введите не менее трёх символов.');
+      const normalized = query.trim().replace(/\s+/g, ' ');
+      if (normalized.length < 3)
+        throw new OffError(
+          'invalid-request',
+          'Введите не менее трёх символов.',
+        );
       if (Date.now() - lastSearch < 6500)
-        throw new Error(
+        throw new OffError(
+          'rate-limit',
           'Подождите несколько секунд перед следующим онлайн-поиском.',
         );
       lastSearch = Date.now();
-      // Browser cannot override User-Agent; OFF supports identification through the app query.
-      const json = await get(
-        `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query.trim())}&search_simple=1&action=process&json=1&page_size=20&fields=${fields}&app_name=MassTracker`,
+      const { json } = await get(
+        `/cgi/search.pl?search_terms=${encodeURIComponent(normalized)}&search_simple=1&action=process&json=1&page_size=20`,
         signal,
       );
       if (!record(json) || !Array.isArray(json.products))
-        throw new Error('Не удалось прочитать ответ Open Food Facts.');
+        throw invalidResponse();
       const products = json.products
         .map(parseOffProduct)
         .filter((p): p is FoodProduct => p !== null);
@@ -132,14 +203,35 @@ export function createOffClient(
     },
     async barcode(code: string, signal?: AbortSignal) {
       if (!validBarcode(code))
-        throw new Error('Проверьте штрихкод и контрольную цифру.');
-      const json = await get(
-        `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=${fields}&app_name=MassTracker`,
+        throw new OffError(
+          'invalid-request',
+          'Проверьте штрихкод и контрольную цифру.',
+        );
+      const now = Date.now();
+      recentBarcodes = recentBarcodes.filter((time) => now - time < 60000);
+      if (recentBarcodes.length >= 15)
+        throw new OffError(
+          'rate-limit',
+          'Лимит проверки штрихкодов. Подождите минуту.',
+        );
+      recentBarcodes.push(now);
+      const { json, status } = await get(
+        `/api/v2/product/${code}.json?lc=ru`,
         signal,
+        true,
       );
-      if (!record(json))
-        throw new Error('Не удалось прочитать ответ Open Food Facts.');
-      return parseOffProduct(json.product);
+      if (!record(json)) throw invalidResponse();
+      if (json.status === 0 && sameBarcode(text(json.code), code)) return null;
+      if (status === 404 || json.status !== 1 || !record(json.product))
+        throw invalidResponse();
+      if (!sameBarcode(text(json.product.code), code)) throw invalidResponse();
+      const product = parseOffProduct(json.product);
+      if (!product)
+        throw new OffError(
+          'incomplete',
+          'Продукт найден. Полных данных о пищевой ценности на 100 г нет.',
+        );
+      return product;
     },
   };
 }

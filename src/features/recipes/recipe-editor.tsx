@@ -14,9 +14,10 @@ import { describeError } from '@/database/storage-diagnostics';
 import { formatNumber } from '@/features/calendar/calendar';
 import { useFoodDiary } from '@/features/food/food-context';
 import { FoodForm } from '@/features/food/food-form';
-import { newId, parseDecimal, searchFoods } from '@/features/food/domain';
+import { newId, parseDecimal } from '@/features/food/domain';
 import { unitLabels, type FoodProduct } from '@/features/food/model';
 import { NutritionValues } from '@/features/food/nutrition-values';
+import { ProductPicker } from '@/features/food/product-picker';
 import { ProductEditor } from '@/features/food/product-editor';
 import { useUpdateBlocker } from '@/features/pwa/pwa-status';
 import {
@@ -38,11 +39,7 @@ import {
   type RecipeIngredient,
 } from './model';
 import { saveRecipe } from './operations';
-import {
-  RecipeNutrition,
-  SearchField,
-  type NutritionMode,
-} from './recipe-controls';
+import { RecipeNutrition, type NutritionMode } from './recipe-controls';
 
 const labels = { ...unitLabels, ...extraUnitLabels };
 const categoryOptions = recipeCategories.map((value) => ({
@@ -51,65 +48,17 @@ const categoryOptions = recipeCategories.map((value) => ({
 }));
 const optionalNumber = (text: string) =>
   text.trim() ? parseDecimal(text) : undefined;
+const difficulties = [
+  { value: '', label: 'Не указана' },
+  { value: 'Простой', label: 'Простой' },
+  { value: 'Средний', label: 'Средний' },
+  { value: 'Сложный', label: 'Сложный' },
+] as const;
 type IngredientDraft = {
   snapshot: RecipeIngredient;
   amount: string;
   factors: Partial<Record<IngredientUnit, number>>;
 };
-
-function IngredientPicker({
-  products,
-  onBack,
-  onCreate,
-  onSelect,
-}: {
-  products: readonly FoodProduct[];
-  onBack(): void;
-  onCreate(): void;
-  onSelect(product: FoodProduct): void;
-}) {
-  const [query, setQuery] = useState('');
-  const [limit, setLimit] = useState(20);
-  const found = searchFoods(products, query);
-  return (
-    <FoodForm title="Выбрать ингредиент" onBack={onBack}>
-      <SearchField
-        name="ingredient-query"
-        label="Название или штрихкод продукта"
-        value={query}
-        onChange={(text) => {
-          setQuery(text);
-          setLimit(20);
-        }}
-      />
-      <PrimaryButton secondary label="Создать продукт" onPress={onCreate} />
-      {found.length === 0 && (
-        <AppText tone="muted">
-          Продукты не найдены. Измените запрос или создайте продукт.
-        </AppText>
-      )}
-      {found.slice(0, limit).map((product) => (
-        <Card key={product.id}>
-          <AppText variant="action">{product.name}</AppText>
-          {!!product.brand && <AppText tone="muted">{product.brand}</AppText>}
-          <NutritionValues caption="На 100 г" values={product.per100} />
-          <PrimaryButton
-            secondary
-            label={`Выбрать: ${product.name}`}
-            onPress={() => onSelect(product)}
-          />
-        </Card>
-      ))}
-      {found.length > limit && (
-        <PrimaryButton
-          secondary
-          label="Показать ещё продукты"
-          onPress={() => setLimit((n) => n + 20)}
-        />
-      )}
-    </FoodForm>
-  );
-}
 
 function IngredientFields({
   draft,
@@ -225,6 +174,13 @@ export function RecipeEditor({
       original?.preparationTime === undefined
         ? ''
         : decimalText(original.preparationTime),
+    prep:
+      original?.metadata === undefined
+        ? ''
+        : decimalText(original.metadata.prep),
+    difficulty:
+      original?.metadata?.difficulty ??
+      ('' as (typeof difficulties)[number]['value']),
     instructions: original?.instructions ?? '',
     category: original?.category ?? ('Основные блюда' as RecipeCategory),
     ingredients: (original?.ingredients ?? []).map((snapshot) => {
@@ -243,6 +199,7 @@ export function RecipeEditor({
   const [page, setPage] = useState<'editor' | 'picker' | 'product'>('editor');
   const [mode, setMode] = useState<NutritionMode>('perServing');
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(!!original?.metadata);
   const [failure, setFailure] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const saving = useRef(false);
@@ -253,6 +210,7 @@ export function RecipeEditor({
   const servings = parseDecimal(draft.servings);
   const cookedWeightGrams = optionalNumber(draft.cookedWeight);
   const preparationTime = optionalNumber(draft.preparationTime);
+  const prep = optionalNumber(draft.prep);
   const errors: Record<string, string> = {};
   if (!name) errors.name = 'Укажите название блюда.';
   if (!positive(servings))
@@ -261,6 +219,11 @@ export function RecipeEditor({
     errors.cookedWeight = 'Введите положительный вес.';
   if (preparationTime !== undefined && !positive(preparationTime))
     errors.preparationTime = 'Введите положительное время.';
+  if (
+    prep !== undefined &&
+    (!Number.isFinite(prep) || prep < 0 || prep > (preparationTime ?? 0))
+  )
+    errors.prep = 'Укажите минуты подготовки в пределах общего времени.';
   if (!draft.ingredients.length)
     errors.ingredients = 'Добавьте хотя бы один ингредиент.';
   const ingredients = draft.ingredients.flatMap(({ snapshot, amount }) => {
@@ -314,6 +277,16 @@ export function RecipeEditor({
       return;
     }
     const now = new Date().toISOString();
+    const instructions = draft.instructions.trim();
+    const sources = [
+      ...new Set(
+        ingredients.map(
+          (item) =>
+            session.products.find((product) => product.id === item.productId)
+              ?.source ?? 'Снимок ингредиента',
+        ),
+      ),
+    ];
     const recipe: Recipe = {
       id,
       name,
@@ -323,7 +296,31 @@ export function RecipeEditor({
       preparationTime,
       ingredients,
       description: draft.description.trim() || undefined,
-      instructions: draft.instructions.trim() || undefined,
+      instructions: instructions || undefined,
+      metadata:
+        draft.difficulty ||
+        prep !== undefined ||
+        draft.category === 'Блюда без приготовления' ||
+        (original?.metadata && preparationTime !== undefined)
+          ? {
+              prep:
+                draft.category === 'Блюда без приготовления'
+                  ? (preparationTime ?? 0)
+                  : (prep ?? 0),
+              cook:
+                draft.category === 'Блюда без приготовления'
+                  ? 0
+                  : (preparationTime ?? 0) - (prep ?? 0),
+              difficulty:
+                draft.difficulty || original?.metadata?.difficulty || 'Простой',
+              tags: original?.metadata?.tags ?? [],
+              steps: instructions
+                .split('\n')
+                .map((step) => step.trim())
+                .filter(Boolean),
+              sources,
+            }
+          : undefined,
       isFavorite: original?.isFavorite ?? false,
       createdAt: original?.createdAt ?? now,
       updatedAt: now,
@@ -343,12 +340,14 @@ export function RecipeEditor({
     return <ProductEditor onBack={() => setPage('picker')} onSaved={select} />;
   if (page === 'picker')
     return (
-      <IngredientPicker
-        products={session?.products ?? []}
-        onSelect={select}
-        onBack={() => setPage('editor')}
-        onCreate={() => setPage('product')}
-      />
+      <FoodForm title="Выбрать ингредиент" onBack={() => setPage('editor')}>
+        <PrimaryButton
+          secondary
+          label="Создать продукт"
+          onPress={() => setPage('product')}
+        />
+        <ProductPicker onProduct={select} />
+      </FoodForm>
     );
   return (
     <FieldFocusContext value={fields}>
@@ -446,12 +445,36 @@ export function RecipeEditor({
         />
         <FormField
           name="preparationTime"
-          label="Время приготовления, мин (необязательно)"
+          label="Общее время, мин (необязательно)"
           inputMode="decimal"
           value={draft.preparationTime}
           onChangeText={(v) => field('preparationTime', v)}
           error={submitted ? errors.preparationTime : undefined}
         />
+        <PrimaryButton
+          secondary
+          label="Подготовка и сложность"
+          expanded={detailsOpen}
+          onPress={() => setDetailsOpen(!detailsOpen)}
+        />
+        {detailsOpen && (
+          <>
+            <FormField
+              name="prep"
+              label="Из них подготовка, мин"
+              inputMode="decimal"
+              value={draft.prep}
+              onChangeText={(value) => field('prep', value)}
+              error={submitted ? errors.prep : undefined}
+            />
+            <ChoiceGroup
+              label="Сложность блюда"
+              value={draft.difficulty}
+              options={difficulties}
+              onChange={(value) => field('difficulty', value)}
+            />
+          </>
+        )}
         <FormField
           name="description"
           label="Описание (необязательно)"

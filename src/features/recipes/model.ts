@@ -10,6 +10,15 @@ export const recipeCategories = [
   'Десерты',
   'Напитки',
   'Протеиновые коктейли',
+  'Обеды',
+  'Ужины',
+  'Мясные блюда',
+  'Рыбные блюда',
+  'Гарниры',
+  'Паста',
+  'Выпечка',
+  'Высококалорийные коктейли',
+  'Блюда без приготовления',
   'Другое',
 ] as const;
 export type RecipeCategory = (typeof recipeCategories)[number];
@@ -44,4 +53,12 @@ export interface Recipe extends Omit<RecipeNutritionSnapshot, 'total'> {
   createdAt: string;
   updatedAt: string;
   ingredients: RecipeIngredient[];
+  metadata?: {
+    prep: number;
+    cook: number;
+    difficulty: 'Простой' | 'Средний' | 'Сложный';
+    tags: readonly string[];
+    steps: readonly string[];
+    sources: readonly string[];
+  };
 }

@@ -99,7 +99,13 @@ test('реальный SQLite обновляет схему v1 и сохраня
   expect(await storage.get('theme_mode')).toBe('dark');
   expect(
     sql.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
-  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+  ).toEqual([
+    { version: 1 },
+    { version: 2 },
+    { version: 3 },
+    { version: 4 },
+    { version: 5 },
+  ]);
 });
 
 test('файловый SQLite восстанавливает профиль, анкету, цель и тему после закрытия соединения', async () => {

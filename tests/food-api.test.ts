@@ -54,7 +54,7 @@ test('поиск, штрихкод, сеть и ограничение част�
   const offline = createOffClient(
     jest.fn().mockRejectedValue(new TypeError('offline')),
   );
-  await expect(offline.barcode(raw.code)).rejects.toThrow(/сети|интернет/);
+  await expect(offline.barcode(raw.code)).rejects.toThrow(/Сетевой запрос/);
 });
 
 test('таймаут запроса, отмена и HTTP лимит не подменяются пустыми продуктами', async () => {
@@ -87,6 +87,127 @@ test('таймаут запроса, отмена и HTTP лимит не под
         jest.fn().mockResolvedValue({ ok: false, status: 429 }),
       ).barcode(raw.code),
     ).rejects.toThrow(/Лимит/);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test.each([200, 404])(
+  'отсутствие товара по штрихкоду в ответе HTTP %i',
+  async (status) => {
+    const client = createOffClient(
+      jest.fn().mockResolvedValue({
+        ok: status === 200,
+        status,
+        json: async () => ({ code: raw.code, status: 0 }),
+      }),
+    );
+    await expect(client.barcode(raw.code)).resolves.toBeNull();
+  },
+);
+
+test('найденный продукт с неполными КБЖУ отличается от отсутствующего', async () => {
+  const client = createOffClient(
+    jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 1, product: { code: raw.code } }),
+    }),
+  );
+  await expect(client.barcode(raw.code)).rejects.toMatchObject({
+    kind: 'incomplete',
+  });
+});
+
+test.each([
+  [400, 'invalid-request'],
+  [403, 'access-denied'],
+  [422, 'invalid-request'],
+  [429, 'rate-limit'],
+  [503, 'unavailable'],
+])('HTTP %i сохраняет причину ошибки', async (status, kind) => {
+  const client = createOffClient(
+    jest.fn().mockResolvedValue({ ok: false, status }),
+  );
+  await expect(client.barcode(raw.code)).rejects.toMatchObject({
+    kind,
+    status,
+  });
+});
+
+test('сетевой сбой и невалидный ответ различаются', async () => {
+  const transport = createOffClient(
+    jest.fn().mockRejectedValue(new TypeError('Failed to fetch')),
+  );
+  await expect(transport.barcode(raw.code)).rejects.toMatchObject({
+    kind: 'network',
+  });
+  const invalid = createOffClient(
+    jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError('Unexpected HTML');
+      },
+    }),
+  );
+  await expect(invalid.barcode(raw.code)).rejects.toMatchObject({
+    kind: 'invalid-response',
+  });
+});
+
+test('поиск кодирует имя продукта, а неверная контрольная цифра не отправляется', async () => {
+  const request = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ products: [] }),
+  });
+  const client = createOffClient(request);
+  await expect(client.barcode('4006381333932')).rejects.toMatchObject({
+    kind: 'invalid-request',
+  });
+  expect(request).not.toHaveBeenCalled();
+  await expect(client.search('  Чай  & мёд  ')).resolves.toEqual({
+    products: [],
+    incomplete: 0,
+  });
+  const url = new URL(request.mock.calls[0][0]);
+  expect(url.origin + url.pathname).toBe(
+    'https://world.openfoodfacts.org/cgi/search.pl',
+  );
+  expect(url.searchParams.get('search_terms')).toBe('Чай & мёд');
+});
+
+test('поиск принимает номер UPC-A с ведущим нулём, добавленным сервисом', async () => {
+  const normalized = { ...raw, code: '0034000470693' };
+  const request = jest.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ status: 1, product: normalized }),
+  });
+  await expect(
+    createOffClient(request).barcode('034000470693'),
+  ).resolves.toMatchObject({ barcode: normalized.code });
+});
+
+test('проверка штрихкодов учитывает минутный лимит API', async () => {
+  jest.useFakeTimers();
+  try {
+    const request = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 1, product: raw }),
+    });
+    const client = createOffClient(request);
+    for (let i = 0; i < 15; i++) await client.barcode(raw.code);
+    await expect(client.barcode(raw.code)).rejects.toMatchObject({
+      kind: 'rate-limit',
+    });
+    expect(request).toHaveBeenCalledTimes(15);
+    await jest.advanceTimersByTimeAsync(60000);
+    await expect(client.barcode(raw.code)).resolves.toMatchObject({
+      barcode: raw.code,
+    });
   } finally {
     jest.useRealTimers();
   }

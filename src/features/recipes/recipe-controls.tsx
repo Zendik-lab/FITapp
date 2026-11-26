@@ -100,11 +100,13 @@ export function SearchField({
   label,
   value,
   onChange,
+  onSubmit,
 }: {
   name: string;
   label: string;
   value: string;
   onChange(text: string): void;
+  onSubmit?(): void;
 }) {
   const fields = useRef(new Map<string, TextInputInstance>());
   return (
@@ -114,6 +116,8 @@ export function SearchField({
         label={label}
         value={value}
         onChangeText={onChange}
+        onSubmitEditing={onSubmit}
+        returnKeyType="search"
       />
       {!!value && (
         <PrimaryButton

@@ -1,4 +1,6 @@
 import { categories, type FoodProduct } from './model';
+import { fdcRows } from './catalog-usda';
+import { legacyAliases } from './catalog-aliases';
 
 // Approximate reference values per 100 g edible part; cooking and brands change them.
 // General composition reference: USDA FoodData Central / SR Legacy (public domain).
@@ -142,12 +144,15 @@ const rows: Row[] = [
   ['Хумус', 14, 166, 7.9, 9.6, 14.3],
   ['Тофу', 14, 144, 17.3, 8.7, 2.8],
 ];
-export const builtinFoods: readonly FoodProduct[] = rows.map(
+const legacyFoods: FoodProduct[] = rows.map(
   ([name, category, calories, protein, fat, carbs], i) => ({
     id: `builtin-${i + 1}`,
     name,
+    aliases: legacyAliases[name],
     category: categories[category],
     per100: { calories, protein, fat, carbs },
+    baseUnit: 'g',
+    approximate: true,
     source:
       category === 13 || category === 14 || category === 3
         ? 'Приблизительное справочное значение; сверьте с этикеткой'
@@ -162,3 +167,37 @@ export const builtinFoods: readonly FoodProduct[] = rows.map(
       : {}),
   }),
 );
+
+const fdcFoods: FoodProduct[] = fdcRows.map(
+  ([
+    fdcId,
+    name,
+    category,
+    calories,
+    protein,
+    fat,
+    carbs,
+    aliases,
+    measures,
+  ]) => ({
+    id: 'fdc-' + fdcId,
+    fdcId,
+    name,
+    aliases,
+    category: categories[category],
+    per100: { calories, protein, fat, carbs },
+    baseUnit: 'g',
+    approximate: true,
+    source: 'USDA FoodData Central, SR Legacy (04.2018), FDC ' + fdcId,
+    isCustom: false,
+    createdAt: '2026-11-27T00:00:00.000Z',
+    updatedAt: '2026-11-27T00:00:00.000Z',
+    ...measures,
+  }),
+);
+
+export const builtinFoodCatalogVersion = 2;
+export const builtinFoods: readonly FoodProduct[] = [
+  ...legacyFoods,
+  ...fdcFoods,
+];

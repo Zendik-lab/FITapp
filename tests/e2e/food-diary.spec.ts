@@ -305,9 +305,19 @@ test.describe('онлайн API без перехвата Service Worker', () =>
         json: {
           products: [
             {
-              code: '4006381333931',
+              code: '036000291452',
               product_name: 'Онлайн тест',
               brands: 'Бренд',
+              nutriments: {
+                'energy-kcal_100g': 100,
+                proteins_100g: 5,
+                fat_100g: 2,
+                carbohydrates_100g: 15,
+              },
+            },
+            {
+              code: '0036000291452',
+              product_name: 'Онлайн дубликат',
               nutriments: {
                 'energy-kcal_100g': 100,
                 proteins_100g: 5,
@@ -331,8 +341,9 @@ test.describe('онлайн API без перехвата Service Worker', () =>
     ).fill('Онлайн');
     await button(page, 'Найти в Open Food Facts').click();
     await expect(button(page, 'Выбрать: Онлайн тест')).toBeVisible();
+    await expect(button(page, 'Выбрать: Онлайн дубликат')).toHaveCount(0);
     await expect(
-      visible(page, page.getByText(/Пропущено карточек/)),
+      visible(page, page.getByText(/Без полных КБЖУ на 100 г/)),
     ).toBeVisible();
     expect(calls).toHaveLength(1);
     await button(page, 'Назад').click();
@@ -347,7 +358,7 @@ test.describe('онлайн API без перехвата Service Worker', () =>
       visible(page, page.getByText(/Некорректный штрихкод/)),
     ).toBeVisible();
     await visible(page, page.getByLabel('Штрихкод', { exact: true })).fill(
-      '4006381333931',
+      '036000291452',
     );
     await button(page, 'Найти по штрихкоду').click();
     await expect(
@@ -447,6 +458,7 @@ test('рецепт коктейля: свой продукт, клавиатур
   const radio = (name: string) =>
     visible(page, page.getByRole('radio', { name, exact: true }));
   const name = 'Коктейль для набора массы';
+  await button(page, 'Рецепты').click();
   await button(page, 'Мои рецепты').click();
   await expect(
     page.getByText('Рецептов пока нет', { exact: true }),
@@ -508,13 +520,13 @@ test('рецепт коктейля: свой продукт, клавиатур
   await button(page, 'В избранное').click();
   await expect(button(page, 'Убрать из избранного')).toBeEnabled();
   await button(page, 'Назад').click();
-  await radio('Избранные рецепты').click();
-  await field('Поиск по названию рецепта').fill('другой рецепт');
+  await button(page, 'Избранное').click();
+  await field('Поиск рецептов').fill('другой рецепт');
   await expect(
     page.getByText('Рецепты по этому запросу не найдены.'),
   ).toBeVisible();
   await button(page, 'Очистить поиск').click();
-  await expect(field('Поиск по названию рецепта')).toBeFocused();
+  await expect(field('Поиск рецептов')).toBeFocused();
   await button(page, `Добавить в дневник: ${name}`).click();
   await typeStable(page, 'Съедено порций', '0,5');
   await radio('Обед').click();
@@ -535,6 +547,7 @@ test('рецепт коктейля: свой продукт, клавиатур
   await page.getByRole('tab', { name: 'Питание', exact: true }).click();
   await button(page, 'Добавить продукт, ужин').click();
   await button(page, 'Выбрать рецепт').click();
+  await button(page, 'Сортировка').click();
   await radio('Недавно использованные').click();
   await button(page, `Добавить в дневник: ${name}`).click();
   await radio('Граммы').click();
@@ -548,7 +561,7 @@ test('рецепт коктейля: свой продукт, клавиатур
     grams: 125.5,
   });
   await page.reload();
-  await button(page, 'Мои рецепты').click();
+  await button(page, 'Рецепты').click();
   await button(page, `Открыть: ${name}`).click();
   await button(page, 'Редактировать рецепт').click();
   await expect(field('Количество порций')).toHaveValue('2');
@@ -573,4 +586,60 @@ test('рецепт коктейля: свой продукт, клавиатур
   await expect(
     page.getByText('КБЖУ на момент записи', { exact: true }),
   ).toBeVisible();
+});
+
+test('готовый каталог, поиск, фильтры, продукты дома и избранное при холодном офлайн-запуске', async ({
+  page,
+  context,
+}) => {
+  await seed(page);
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
+  await context.setOffline(true);
+  await button(page, 'Рецепты').click();
+  await expect(
+    page.getByText('Найдено рецептов: 150', { exact: true }),
+  ).toBeVisible();
+  await typeStable(page, 'Поиск рецептов', 'овсянка с яблоком');
+  const name = 'Молочная овсянка с яблоком';
+  await button(page, 'Фильтры').click();
+  await typeStable(page, 'Калории до, ккал', '1');
+  await button(page, 'Применить фильтры').click();
+  await expect(
+    page.getByText('Найдено рецептов: 0', { exact: true }),
+  ).toBeVisible();
+  await button(page, 'Калории до, ккал 1 ×').click();
+  await button(page, 'Что приготовить из того, что есть').click();
+  await button(page, 'Выбрать продукты дома').click();
+  await page
+    .getByLabel('Название или штрихкод продукта', { exact: true })
+    .fill('овсяные хлопья');
+  await button(page, 'Выбрать: Овсяные хлопья сухие').click();
+  await button(page, 'Готово').click();
+  await button(page, 'Открыть: ' + name).click();
+  await expect(page.getByText('Есть дома', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('Не хватает', { exact: true }).first(),
+  ).toBeVisible();
+  await button(page, 'Отметить шаг 1').click();
+  await expect(button(page, 'Шаг 1 выполнен')).toBeVisible();
+  await button(page, 'В избранное').click();
+  await expect(button(page, 'Убрать из избранного')).toBeEnabled();
+  await button(page, 'Добавить в дневник').click();
+  await button(page, 'Добавить в дневник').click();
+  expect((await state(page)).entries).toEqual([
+    expect.objectContaining({ product: expect.objectContaining({ name }) }),
+  ]);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Рецепты').click();
+  await expect(button(page, 'овсянка с яблоком')).toBeVisible();
+  await button(page, 'Избранное').click();
+  await expect(button(page, 'Открыть: ' + name)).toBeVisible();
+  await button(page, 'Очистить историю').click();
+  await expect(button(page, 'овсянка с яблоком')).toHaveCount(0);
 });

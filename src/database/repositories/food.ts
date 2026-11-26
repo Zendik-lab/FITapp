@@ -43,6 +43,22 @@ function recipe(value: unknown): value is Recipe {
   for (const field of ['cookedWeightGrams', 'preparationTime'])
     if (value[field] !== undefined && !positiveNumber(value[field]))
       return false;
+  const metadata = value.metadata;
+  if (
+    metadata !== undefined &&
+    (!record(metadata) ||
+      !['prep', 'cook'].every(
+        (key) =>
+          typeof metadata[key] === 'number' &&
+          Number.isFinite(metadata[key]) &&
+          metadata[key] >= 0,
+      ) ||
+      !['Простой', 'Средний', 'Сложный'].includes(
+        String(metadata.difficulty),
+      ) ||
+      !['tags', 'steps', 'sources'].every((key) => strings(metadata[key])))
+  )
+    return false;
   const ids = new Set<string>();
   for (const i of value.ingredients) {
     if (
@@ -68,6 +84,12 @@ function recipe(value: unknown): value is Recipe {
   } catch {
     return false;
   }
+}
+
+function strings(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) && value.every((item) => typeof item === 'string')
+  );
 }
 
 function recipeEntry(e: Record<string, unknown>): boolean {
@@ -108,6 +130,15 @@ function product(value: unknown): value is FoodProduct {
     return false;
   for (const k of ['brand', 'barcode', 'imageUrl'])
     if (value[k] !== undefined && typeof value[k] !== 'string') return false;
+  if (
+    (value.aliases !== undefined && !strings(value.aliases)) ||
+    (value.approximate !== undefined &&
+      typeof value.approximate !== 'boolean') ||
+    (value.baseUnit !== undefined && value.baseUnit !== 'g') ||
+    (value.fdcId !== undefined &&
+      (!positiveNumber(value.fdcId) || !Number.isInteger(value.fdcId)))
+  )
+    return false;
   for (const k of ['gramsPerMl', 'pieceGrams', 'servingGrams'])
     if (
       value[k] !== undefined &&
@@ -130,6 +161,13 @@ function valid(value: unknown): value is FoodState {
   )
     return false;
   if (!value.products.every(product)) return false;
+  if (
+    (value.favoriteRecipeIds !== undefined &&
+      !strings(value.favoriteRecipeIds)) ||
+    (value.recipeSearchHistory !== undefined &&
+      !strings(value.recipeSearchHistory))
+  )
+    return false;
   if (
     !value.recipes.every(recipe) ||
     new Set(value.recipes.map((r) => r.id)).size !== value.recipes.length

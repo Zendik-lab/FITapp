@@ -121,7 +121,7 @@ export function DiaryScreen() {
       <PrimaryButton
         secondary
         icon="BookOpen"
-        label="Мои рецепты"
+        label="Рецепты"
         disabled={disabled}
         onPress={() => setRecipes(true)}
       />

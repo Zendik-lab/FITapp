@@ -13,6 +13,7 @@ import {
 import { addEntry, removeEntry } from '@/features/food/operations';
 import { validateRecipe } from './domain';
 import type { Recipe } from './model';
+import { getBuiltinRecipe, isBuiltinRecipe } from './library';
 
 function ensureCurrent(current: Recipe | undefined, expected: Recipe) {
   if (!current || JSON.stringify(current) !== JSON.stringify(expected))
@@ -24,6 +25,8 @@ export function saveRecipe(
   recipe: Recipe,
   previous?: Recipe,
 ): FoodState {
+  if (isBuiltinRecipe(recipe.id))
+    throw new Error('Скопируйте встроенный рецепт, чтобы изменить его.');
   validateRecipe(recipe);
   const existing = state.recipes.find((r) => r.id === recipe.id);
   if (previous) ensureCurrent(existing, previous);
@@ -54,12 +57,60 @@ export function deleteRecipe(
   id: string,
   previous?: Recipe,
 ): FoodState {
+  if (isBuiltinRecipe(id)) throw new Error('Встроенный рецепт нельзя удалить.');
   if (previous)
     ensureCurrent(
       state.recipes.find((r) => r.id === id),
       previous,
     );
   return { ...state, recipes: state.recipes.filter((r) => r.id !== id) };
+}
+
+export function recipeIsFavorite(state: FoodState, recipe: Recipe) {
+  return isBuiltinRecipe(recipe.id)
+    ? (state.favoriteRecipeIds ?? []).includes(recipe.id)
+    : recipe.isFavorite;
+}
+
+export function setRecipeFavorite(
+  state: FoodState,
+  recipe: Recipe,
+  favorite: boolean,
+): FoodState {
+  if (!isBuiltinRecipe(recipe.id))
+    return saveRecipe(
+      state,
+      {
+        ...recipe,
+        isFavorite: favorite,
+        updatedAt: new Date().toISOString(),
+      },
+      recipe,
+    );
+  if (!getBuiltinRecipe(recipe.id)) throw new Error('Рецепт недоступен.');
+  const favorites = new Set(state.favoriteRecipeIds);
+  if (favorite) favorites.add(recipe.id);
+  else favorites.delete(recipe.id);
+  return { ...state, favoriteRecipeIds: [...favorites] };
+}
+
+export function rememberRecipeQuery(
+  state: FoodState,
+  query: string,
+): FoodState {
+  const term = query.trim().replace(/\s+/g, ' ').slice(0, 120);
+  if (!term) return state;
+  const normalized = term.toLocaleLowerCase('ru').replace(/ё/g, 'е');
+  return {
+    ...state,
+    recipeSearchHistory: [
+      term,
+      ...(state.recipeSearchHistory ?? []).filter(
+        (previous) =>
+          previous.toLocaleLowerCase('ru').replace(/ё/g, 'е') !== normalized,
+      ),
+    ].slice(0, 8),
+  };
 }
 
 export function addRecipeEntry(
@@ -73,7 +124,7 @@ export function addRecipeEntry(
   previous?: Recipe,
 ): FoodState {
   if (state.entries.some((entry) => entry.id === entryId)) return state;
-  const recipe = state.recipes.find((r) => r.id === id);
+  const recipe = getBuiltinRecipe(id) ?? state.recipes.find((r) => r.id === id);
   if (previous) ensureCurrent(recipe, previous);
   if (!recipe) throw new Error('Рецепт уже удалён.');
   const snapshot = {

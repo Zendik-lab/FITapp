@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
@@ -19,7 +20,20 @@ import {
   scaleRecipe,
 } from './domain';
 import { extraUnitLabels, type Recipe } from './model';
-import { deleteRecipe, duplicateRecipe, saveRecipe } from './operations';
+import {
+  deleteRecipe,
+  duplicateRecipe,
+  recipeIsFavorite,
+  saveRecipe,
+  setRecipeFavorite,
+} from './operations';
+import { isBuiltinRecipe } from './library';
+import {
+  RecipeArtwork,
+  ToggleChip,
+  toggleValue,
+} from './recipe-library-controls';
+import { isPantryBasic } from './recipe-search';
 import {
   RecipeNutrition,
   recipeYield,
@@ -29,12 +43,16 @@ import {
 const labels = { ...unitLabels, ...extraUnitLabels };
 export function RecipeDetail({
   recipe,
+  available,
+  ignoreBasics = false,
   onBack,
   onEdit,
   onAdd,
   onList,
 }: {
   recipe: Recipe;
+  available?: readonly string[];
+  ignoreBasics?: boolean;
   onBack(): void;
   onEdit(): void;
   onAdd(): void;
@@ -45,6 +63,8 @@ export function RecipeDetail({
   const [amount, setAmount] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState(false);
+  const [prepared, setPrepared] = useState<readonly string[]>([]);
+  const [completed, setCompleted] = useState<readonly string[]>([]);
   const saving = useRef(false);
   const duplicate = useRef<Recipe | null>(null);
   let scaled;
@@ -56,6 +76,11 @@ export function RecipeDetail({
   }
   const displayed = scaled ?? recipe;
   const disabled = session?.pending || !!session?.failure;
+  const builtin = isBuiltinRecipe(recipe.id);
+  const favorite = session ? recipeIsFavorite(session.state, recipe) : false;
+  const steps =
+    recipe.metadata?.steps ??
+    recipe.instructions?.split('\n').filter((step) => step.trim());
   async function commit(
     operation: (s: FoodState) => FoodState,
     message?: string,
@@ -81,10 +106,43 @@ export function RecipeDetail({
       pending={session?.pending}
       error={error}
     >
+      <RecipeArtwork category={recipe.category} large />
+      <AppText variant="caption" tone="muted">
+        {[
+          recipe.category,
+          recipe.metadata?.difficulty,
+          ...(recipe.metadata?.tags ?? []),
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </AppText>
+      {recipe.metadata && recipe.metadata.prep + recipe.metadata.cook > 0 && (
+        <AppText tone="muted">
+          Подготовка · {recipe.metadata.prep} мин ·{' '}
+          {recipe.metadata.cook
+            ? `Приготовление · ${recipe.metadata.cook} мин`
+            : 'Без приготовления'}
+        </AppText>
+      )}
+      {!!recipe.description && <AppText>{recipe.description}</AppText>}
       <RecipeNutrition
         nutrition={calculateRecipe(displayed)}
         mode={mode}
         onChange={setMode}
+      />
+      {!!recipe.metadata?.sources.length && (
+        <AppText variant="caption" tone="muted">
+          КБЖУ рассчитаны по составу и приблизительны.{' '}
+          {recipe.metadata.sources.join(' · ')}
+        </AppText>
+      )}
+      <PrimaryButton
+        secondary
+        label={favorite ? 'Убрать из избранного' : 'В избранное'}
+        disabled={disabled}
+        onPress={() =>
+          void commit((state) => setRecipeFavorite(state, recipe, !favorite))
+        }
       />
       <Card>
         <AppText variant="section">Приготовление</AppText>
@@ -118,7 +176,6 @@ export function RecipeDetail({
             {recipeYield(scaled.servings, scaled.cookedWeightGrams)}
           </AppText>
         )}
-        {!!recipe.description && <AppText>{recipe.description}</AppText>}
       </Card>
       <AppText variant="section" accessibilityRole="header">
         Ингредиенты
@@ -129,13 +186,51 @@ export function RecipeDetail({
           <AppText tone="muted">
             {formatFoodQuantity(item.quantity)} {labels[item.unit]}
           </AppText>
+          {available && (
+            <AppText variant="caption" tone="muted">
+              {ignoreBasics && isPantryBasic(item.productName)
+                ? 'Базовый продукт'
+                : available.includes(item.productId)
+                  ? 'Есть дома'
+                  : 'Не хватает'}
+            </AppText>
+          )}
           <NutritionValues values={ingredientNutrition(item)} />
+          <ToggleChip
+            label={
+              prepared.includes(item.id)
+                ? 'Подготовлено'
+                : 'Отметить как подготовленное'
+            }
+            active={prepared.includes(item.id)}
+            onPress={() => setPrepared((value) => toggleValue(value, item.id))}
+          />
         </Card>
       ))}
-      {!!recipe.instructions && (
+      {!!steps?.length && (
         <Card>
           <AppText variant="section">Инструкция</AppText>
-          <AppText>{recipe.instructions}</AppText>
+          {steps.map((step, index) => {
+            const id = String(index + 1);
+            return (
+              <View key={id}>
+                <AppText>
+                  {id}. {step}
+                </AppText>
+                <ToggleChip
+                  label={
+                    completed.includes(id)
+                      ? `Шаг ${id} выполнен`
+                      : `Отметить шаг ${id}`
+                  }
+                  active={completed.includes(id)}
+                  onPress={() =>
+                    setCompleted((value) => toggleValue(value, id))
+                  }
+                />
+              </View>
+            );
+          })}
         </Card>
       )}
       <PrimaryButton
@@ -143,33 +238,17 @@ export function RecipeDetail({
         disabled={disabled}
         onPress={onAdd}
       />
+      {!builtin && (
+        <PrimaryButton
+          secondary
+          label="Редактировать рецепт"
+          disabled={disabled}
+          onPress={onEdit}
+        />
+      )}
       <PrimaryButton
         secondary
-        label="Редактировать рецепт"
-        disabled={disabled}
-        onPress={onEdit}
-      />
-      <PrimaryButton
-        secondary
-        label={recipe.isFavorite ? 'Убрать из избранного' : 'В избранное'}
-        disabled={disabled}
-        onPress={() =>
-          void commit((state) =>
-            saveRecipe(
-              state,
-              {
-                ...recipe,
-                isFavorite: !recipe.isFavorite,
-                updatedAt: new Date().toISOString(),
-              },
-              recipe,
-            ),
-          )
-        }
-      />
-      <PrimaryButton
-        secondary
-        label="Дублировать рецепт"
+        label={builtin ? 'Скопировать в мои рецепты' : 'Дублировать рецепт'}
         disabled={disabled}
         onPress={() => {
           const copy = (duplicate.current ??= duplicateRecipe(recipe));
@@ -179,12 +258,14 @@ export function RecipeDetail({
           );
         }}
       />
-      <PrimaryButton
-        secondary
-        label="Удалить рецепт"
-        disabled={disabled}
-        onPress={() => setConfirm(true)}
-      />
+      {!builtin && (
+        <PrimaryButton
+          secondary
+          label="Удалить рецепт"
+          disabled={disabled}
+          onPress={() => setConfirm(true)}
+        />
+      )}
       {confirm && (
         <Dialog title="Удалить рецепт?" onDismiss={() => setConfirm(false)}>
           <AppText>

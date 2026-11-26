@@ -27,6 +27,8 @@ export const categories = [
   'Сладости',
   'Спортивное питание',
   'Готовые продукты',
+  'Специи и добавки',
+  'Соусы и заправки',
 ] as const;
 export interface FoodProduct {
   id: string;
@@ -35,6 +37,10 @@ export interface FoodProduct {
   brand?: string;
   barcode?: string;
   per100: NutritionTargets;
+  aliases?: readonly string[];
+  baseUnit?: 'g';
+  approximate?: boolean;
+  fdcId?: number;
   source: string;
   isCustom: boolean;
   createdAt: string;
@@ -78,6 +84,8 @@ export interface FoodState {
   favorites: FavoriteFood[];
   recent: RecentFood[];
   recipes: Recipe[];
+  favoriteRecipeIds?: string[];
+  recipeSearchHistory?: string[];
 }
 export const emptyFoodState = (): FoodState => ({
   version: 1,

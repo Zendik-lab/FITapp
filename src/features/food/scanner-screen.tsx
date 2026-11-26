@@ -3,7 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { AppState } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
-import { FormField } from '@/components/form-controls';
+import { FormDisabledContext, FormField } from '@/components/form-controls';
 import { describeError } from '@/database/storage-diagnostics';
 import { CameraScanner } from './camera-scanner';
 import { FoodForm } from './food-form';
@@ -65,6 +65,7 @@ export function ScannerScreen({
       onProduct(local);
       return;
     }
+    if (!session) return;
     guard.current = true;
     setBusy(true);
     const controller = new AbortController();
@@ -72,13 +73,13 @@ export function ScannerScreen({
     try {
       const product = await offClient.barcode(value, controller.signal);
       if (controller.signal.aborted) return;
-      if (product && session) {
+      if (product) {
         await session.change((s) => saveProduct(s, product));
         if (!controller.signal.aborted) onProduct(product);
       } else {
         setMissing(true);
         setMessage(
-          'Продукт не найден или нет полной пищевой ценности на 100 г. Можно создать его по этикетке.',
+          'В Open Food Facts нет продукта с таким штрихкодом. Можно создать его по этикетке.',
         );
       }
     } catch (error) {
@@ -107,16 +108,19 @@ export function ScannerScreen({
           onPress={() => setCamera(true)}
         />
       )}
-      <FormField
-        name="manual-barcode"
-        label="Штрихкод"
-        inputMode="numeric"
-        value={code}
-        onChangeText={(v) => {
-          setCode(v);
-          setMissing(false);
-        }}
-      />
+      <FormDisabledContext value={busy}>
+        <FormField
+          name="manual-barcode"
+          label="Штрихкод"
+          inputMode="numeric"
+          value={code}
+          onChangeText={(v) => {
+            setCode(v);
+            setMissing(false);
+            setMessage('');
+          }}
+        />
+      </FormDisabledContext>
       <PrimaryButton
         label={busy ? 'Поиск продукта…' : 'Найти по штрихкоду'}
         disabled={busy || !code}

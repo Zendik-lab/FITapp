@@ -1,3 +1,4 @@
+import { normalizeSearch, searchTerms, wordScore } from './local-search';
 import type { NutritionTargets } from '@/features/nutrition/engine';
 import {
   meals,
@@ -259,14 +260,30 @@ export function searchFoods(
   foods: readonly FoodProduct[],
   query: string,
 ): FoodProduct[] {
-  const words = query.toLocaleLowerCase('ru').trim().split(/\s+/);
-  return foods.filter(
-    (food) =>
-      sameBarcode(food.barcode, query.trim()) ||
-      words.every((word) =>
-        `${food.name} ${food.brand ?? ''} ${food.barcode ?? ''}`
-          .toLocaleLowerCase('ru')
-          .includes(word),
-      ),
-  );
+  const terms = searchTerms(query);
+  if (!terms.length) return [...foods];
+  const phrase = normalizeSearch(query);
+  return foods
+    .flatMap((food) => {
+      if (sameBarcode(food.barcode, query.trim()))
+        return [{ food, score: 1000 }];
+      const name = searchTerms(food.name);
+      const descriptors = searchTerms(
+        [food.brand, food.barcode, food.category, ...(food.aliases ?? [])].join(
+          ' ',
+        ),
+      );
+      let score = normalizeSearch(food.name) === phrase ? 100 : 0;
+      for (const term of terms) {
+        const match = Math.max(
+          wordScore(term, name) * 2,
+          wordScore(term, descriptors),
+        );
+        if (!match) return [];
+        score += match;
+      }
+      return [{ food, score }];
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(({ food }) => food);
 }
