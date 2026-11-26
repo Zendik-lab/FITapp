@@ -8,6 +8,14 @@ import { readWorkerStatus } from './worker-status';
 
 const reloadKey = 'masstracker:last-update-reload';
 
+function lastReload() {
+  try {
+    return window.sessionStorage.getItem(reloadKey);
+  } catch {
+    return null;
+  }
+}
+
 export function wasUpdateInstalled(): boolean {
   try {
     return window.sessionStorage.getItem(reloadKey) === currentBuild().buildId;
@@ -35,7 +43,7 @@ export async function activateUpdate(worker: ServiceWorker) {
       throw new Error(
         'Обновление ещё не загружено полностью. Повторите проверку.',
       );
-    if (window.sessionStorage.getItem(reloadKey) === target.version)
+    if (lastReload() === target.version)
       throw new Error(
         'Повторная перезагрузка этой сборки остановлена. Закройте и снова откройте приложение.',
       );
@@ -96,7 +104,11 @@ export async function activateUpdate(worker: ServiceWorker) {
       }
     });
     assertSafeToUpdate();
-    window.sessionStorage.setItem(reloadKey, target.version);
+    try {
+      window.sessionStorage.setItem(reloadKey, target.version);
+    } catch {
+      // Reload is explicit; this optional confirmation marker must not block it.
+    }
     window.location.reload();
   } catch (error) {
     resumeSettingsWrites();

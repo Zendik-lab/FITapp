@@ -18,6 +18,39 @@ test.afterAll(async () => {
   await new Promise<void>((done) => server.close(() => done()));
 });
 
+test('быстрый ввод двух полей одним пакетом переживает reload без потери даты рождения', async ({
+  page,
+}) => {
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Начать', exact: true }).click();
+  await expect(page.getByLabel('Дата рождения', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    const setValue = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      'value',
+    )?.set;
+    if (!setValue) throw new Error('Missing input setter');
+    for (const [id, value] of [
+      ['birthDate', '01.01.1996'],
+      ['height', '180'],
+    ]) {
+      const input = document.getElementById(id);
+      if (!(input instanceof HTMLInputElement))
+        throw new Error(`Missing ${id}`);
+      setValue.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+  await expect(
+    page.getByText('Ответы сохранены на устройстве.', { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Дата рождения', { exact: true })).toHaveValue(
+    '01.01.1996',
+  );
+  await expect(page.getByLabel('Рост, см', { exact: true })).toHaveValue('180');
+});
+
 async function continueStep(page: Page) {
   await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
 }
@@ -31,6 +64,9 @@ async function reachSummary(page: Page) {
   ).toBeVisible();
   await page.getByLabel('Имя', { exact: true }).fill('Алекс');
   await page.getByLabel('Дата рождения', { exact: true }).fill('01.01.1996');
+  // Wait for the controlled form to accept WebKit's input event, rather than
+  // treating the DOM value changed by automation as a saved application value.
+  await expect(page.getByText(/^Возраст: \d+$/)).toBeVisible();
   const male = page.getByRole('radio', { name: 'Мужской', exact: true });
   await male.focus();
   await male.press('Space');
@@ -51,6 +87,13 @@ async function reachSummary(page: Page) {
   await expect(page.getByLabel('Текущий вес, кг', { exact: true })).toHaveValue(
     '70,5',
   );
+  await expect(page.getByLabel('Дата рождения', { exact: true })).toHaveValue(
+    '01.01.1996',
+  );
+  await expect(page.getByLabel('Рост, см', { exact: true })).toHaveValue('180');
+  await expect(
+    page.getByRole('radio', { name: 'Мужской', exact: true }),
+  ).toBeChecked();
   await continueStep(page);
   await page.getByRole('radio', { name: 'Набор массы', exact: true }).click();
   await continueStep(page);

@@ -16,7 +16,11 @@ import { SectionHeader } from '@/components/headers';
 import { useAppTheme } from '@/theme';
 
 import { activateUpdate, wasUpdateInstalled } from './web-update';
-import { currentBuild } from './build-info';
+import { buildEnvironment, currentBuild } from './build-info';
+import {
+  DiagnosticsSection,
+  diagnosticTime,
+} from '@/features/settings/diagnostics-section';
 import {
   blockUpdates,
   isUpdateBlocked,
@@ -26,12 +30,14 @@ import {
   observeOfflineSupport,
   type OfflinePreparation,
   type UpdateCheck,
+  type PwaDiagnostics,
 } from './offline-support';
 
 const PwaContext = createContext<{
   offline: boolean;
   ready: boolean;
   preparation: OfflinePreparation;
+  diagnostics: PwaDiagnostics;
   prepareOffline: () => void;
   updateAvailable: boolean;
   updating: boolean;
@@ -75,6 +81,14 @@ function useStandalone() {
   );
 }
 
+function unsupportedReason() {
+  if (__DEV__) return 'Service Worker отключён в режиме разработки.';
+  if (typeof window === 'undefined') return;
+  if (!window.isSecureContext) return 'Для Service Worker требуется HTTPS.';
+  if (!('serviceWorker' in navigator))
+    return 'Браузер не поддерживает Service Worker.';
+}
+
 export function PwaProvider({ children }: { children: ReactNode }) {
   const offline = useSyncExternalStore(
     subscribeToConnection,
@@ -85,6 +99,8 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const [preparation, setPreparation] =
     useState<OfflinePreparation>('unavailable');
   const prepareOffline = useRef<() => void>(() => {});
+  const checkUpdates = useRef<() => void>(() => {});
+  const [diagnostics, setDiagnostics] = useState<PwaDiagnostics>({});
   const [update, setUpdate] = useState<ServiceWorker | null>(null);
   const [dismissed, setDismissed] = useState<ServiceWorker | null>(null);
   const [check, setCheck] = useState<UpdateCheck>({ state: 'idle' });
@@ -145,13 +161,21 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, [standalone]);
 
   useEffect(() => {
-    if (__DEV__ || !window.isSecureContext || !('serviceWorker' in navigator))
+    if (__DEV__ || !window.isSecureContext || !('serviceWorker' in navigator)) {
       return;
+    }
 
-    const support = observeOfflineSupport(setPreparation, setUpdate, setCheck);
+    const support = observeOfflineSupport(
+      setPreparation,
+      setUpdate,
+      setCheck,
+      (next) => setDiagnostics((previous) => ({ ...previous, ...next })),
+    );
     prepareOffline.current = support.prepare;
+    checkUpdates.current = support.checkUpdates;
     return () => {
       prepareOffline.current = () => {};
+      checkUpdates.current = () => {};
       support.dispose();
     };
   }, []);
@@ -181,6 +205,10 @@ export function PwaProvider({ children }: { children: ReactNode }) {
         offline,
         ready: preparation === 'ready',
         preparation,
+        diagnostics: {
+          ...diagnostics,
+          error: diagnostics.error ?? unsupportedReason(),
+        },
         prepareOffline: () => prepareOffline.current(),
         updateAvailable: Boolean(update),
         updating,
@@ -189,7 +217,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
         checkUpdates: () => {
           setDismissed(null);
           setUpdateError(undefined);
-          prepareOffline.current();
+          checkUpdates.current();
         },
         dismissUpdate: () => setDismissed(update),
         noticeVisible: Boolean(update && update !== dismissed),
@@ -204,6 +232,19 @@ export function PwaProvider({ children }: { children: ReactNode }) {
 
 export function useUpdateBlocker() {
   useLayoutEffect(blockUpdates, []);
+}
+
+/** Called only after ProfileProvider has restored and validated local state. */
+export function useConfirmPwaStartup() {
+  const pwa = use(PwaContext);
+  const ready = pwa?.ready;
+  useEffect(() => {
+    if (!ready || !navigator.serviceWorker.controller) return;
+    navigator.serviceWorker.controller.postMessage({
+      type: 'CONFIRM_APP_READY',
+      buildId: currentBuild().buildId,
+    });
+  }, [ready]);
 }
 
 export function PwaNotices({
@@ -276,7 +317,11 @@ export function AppVersionSection() {
       <AppText>{info.appVersion}</AppText>
       <AppText variant="caption" tone="muted">
         Сборка{' '}
-        {info.buildId === 'development' ? 'для разработки' : info.buildId}
+        {info.buildId === 'development'
+          ? 'для разработки'
+          : info.buildId === 'unknown'
+            ? 'не определена — неполная публикация'
+            : info.buildId}
       </AppText>
       {installed && (
         <AppText variant="caption" tone="muted" accessibilityRole="status">
@@ -311,6 +356,52 @@ export function AppVersionSection() {
   );
 }
 
+export function AppDiagnosticsSection() {
+  const pwa = use(PwaContext);
+  const standalone = useStandalone();
+  const info = currentBuild();
+  const data = pwa?.diagnostics;
+  return (
+    <DiagnosticsSection
+      rows={[
+        { label: 'Версия', value: info.appVersion },
+        { label: 'ID сборки', value: info.buildId },
+        { label: 'Окружение', value: buildEnvironment() },
+        {
+          label: 'Режим запуска',
+          value: standalone ? 'Установленная PWA' : 'Браузер',
+        },
+        {
+          label: 'Origin',
+          value: typeof location === 'undefined' ? '—' : location.origin,
+        },
+        {
+          label: 'Service Worker',
+          value: `${data?.workerState ?? 'не зарегистрирован'}; контроль: ${data?.controlled ? 'да' : 'нет'}`,
+        },
+        { label: 'Scope', value: data?.scope ?? '—' },
+        { label: 'Сборка worker', value: data?.workerBuildId ?? '—' },
+        {
+          label: 'Кеш',
+          value: `${pwa?.ready ? 'готов' : pwa?.preparation === 'preparing' ? 'подготовка' : 'не готов'}; ${data?.cached ?? '—'}/${data?.resources ?? '—'} ресурсов`,
+        },
+        {
+          label: 'Последняя проверка обновлений',
+          value: diagnosticTime(pwa?.check.checkedAt),
+        },
+        {
+          label: 'Ошибка PWA',
+          value:
+            data?.error ??
+            pwa?.updateError ??
+            (pwa?.check.state === 'error' ? pwa.check.message : undefined) ??
+            'нет',
+        },
+      ]}
+    />
+  );
+}
+
 export function InstallAppSection() {
   const pwa = use(PwaContext);
   const standalone = useStandalone();
@@ -342,6 +433,11 @@ export function InstallAppSection() {
         window.isSecureContext &&
         'serviceWorker' in navigator && (
           <>
+            {pwa.diagnostics.error && (
+              <AppText variant="caption" tone="error" accessibilityRole="alert">
+                {pwa.diagnostics.error}
+              </AppText>
+            )}
             <AppText
               variant="caption"
               tone="muted"

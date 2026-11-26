@@ -9,9 +9,19 @@ export function currentBuild(): BuildInfo {
       : document.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)
           ?.content;
   return {
-    buildId: meta('app-build') ?? 'development',
+    buildId:
+      meta('app-build') ??
+      process.env.EXPO_PUBLIC_BUILD_ID ??
+      (__DEV__ ? 'development' : 'unknown'),
     appVersion: meta('app-version') ?? version,
   };
+}
+
+export function buildEnvironment() {
+  if (__DEV__) return 'Разработка';
+  return isBuildInfo(currentBuild())
+    ? 'Production'
+    : 'Production: неполная публикация';
 }
 
 export function isBuildInfo(value: unknown): value is BuildInfo {

@@ -11,6 +11,32 @@ const appRoutes = new Set([
   '/profile',
   '/index.html',
 ]);
+const diagnosticCache = 'masstracker-diagnostics';
+const failurePath = '/__masstracker_install_failure__';
+
+function errorText(error) {
+  return `${error?.name ?? 'Error'}: ${error?.message ?? String(error)}`;
+}
+
+function validateMime(path, response) {
+  const expected =
+    path === '/'
+      ? /text\/html/i
+      : path.endsWith('.js')
+        ? /(?:application|text)\/(?:x-)?javascript/i
+        : path.endsWith('.css')
+          ? /text\/css/i
+          : path.endsWith('.webmanifest')
+            ? /application\/(?:manifest\+)?json/i
+            : path.endsWith('.json')
+              ? /application\/json/i
+              : /\.(png|svg|jpg|jpeg|webp|ico)$/.test(path)
+                ? /image\//i
+                : undefined;
+  const type = response.headers.get('content-type') ?? '';
+  if (expected && !expected.test(type))
+    throw new Error(`Неверный MIME ${type || '(отсутствует)'}`);
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(precache());
@@ -28,8 +54,41 @@ async function precache() {
       'X-MassTracker-Predecessors',
       JSON.stringify(previous),
     );
+    // A successful retry invalidates only this build's earlier failure.
+    // Diagnostic bookkeeping must not turn a complete install into a failure.
+    try {
+      if (await caches.has(diagnosticCache)) {
+        const diagnostics = await caches.open(diagnosticCache);
+        const failure = await diagnostics.match(failurePath);
+        if (failure && (await failure.json()).buildId === build.version)
+          await diagnostics.delete(failurePath);
+      }
+    } catch (error) {
+      console.warn(
+        '[MassTracker] Не удалось очистить старую ошибку установки',
+        error,
+      );
+    }
   } catch (error) {
-    await caches.delete(cacheName);
+    // Failed workers cannot answer messages. Preserve the actual installation
+    // failure separately from resource caches, never in the user's database.
+    await Promise.allSettled([
+      caches.delete(cacheName),
+      (async () => {
+        const diagnostics = await caches.open(diagnosticCache);
+        await diagnostics.put(
+          failurePath,
+          new Response(
+            JSON.stringify({
+              buildId: build.version,
+              error: errorText(error),
+              occurredAt: new Date().toISOString(),
+            }),
+            { headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      })(),
+    ]);
     throw error;
   }
 }
@@ -56,9 +115,13 @@ async function fillCache() {
               signal: controller.signal,
             }),
           );
-          if (!response.ok)
-            throw new Error(`PWA resource unavailable: ${path}`);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          validateMime(path, response);
           await cache.put(path, response);
+        } catch (error) {
+          throw new Error(
+            `Не удалось кешировать ${path}: ${errorText(error)}. Проверьте доступность ресурса и целостность публикации.`,
+          );
         } finally {
           clearTimeout(timeout);
         }
@@ -71,18 +134,15 @@ async function fillCache() {
 
 async function offlineStatus() {
   const cache = await caches.open(cacheName);
-  const ready = (
-    await Promise.all(
-      [...resources.keys()].map(async (path) =>
-        Boolean(await cache.match(path)),
-      ),
-    )
-  ).every(Boolean);
+  const present = await Promise.all(
+    [...resources.keys()].map(async (path) => Boolean(await cache.match(path))),
+  );
   return {
     type: 'OFFLINE_STATUS',
-    ready,
+    ready: present.every(Boolean),
     version: build.version,
     resources: resources.size,
+    cached: present.filter(Boolean).length,
   };
 }
 
@@ -137,6 +197,23 @@ async function setShellHeader(name, value) {
 
 self.addEventListener('message', (event) => {
   if (
+    event.data?.type === 'CONFIRM_APP_READY' &&
+    event.data.buildId === build.version &&
+    event.source?.id
+  ) {
+    event.waitUntil(
+      (async () => {
+        if (
+          (await offlineStatus()).ready &&
+          (await self.clients.get(event.source.id))
+        ) {
+          await removeOldResourceCaches();
+        }
+      })(),
+    );
+    return;
+  }
+  if (
     event.ports[0] &&
     ['GET_OFFLINE_STATUS', 'PREPARE_OFFLINE'].includes(event.data?.type)
   ) {
@@ -146,22 +223,15 @@ self.addEventListener('message', (event) => {
           if (event.data.type === 'PREPARE_OFFLINE') await fillCache();
           const status = await offlineStatus();
           event.ports[0].postMessage(status);
-          // A newly running app confirms its own HTML build before old caches
-          // can disappear. No storage outside our resource caches is touched.
-          if (
-            status.ready &&
-            event.data.buildId === build.version &&
-            event.source?.id &&
-            (await self.clients.get(event.source.id))
-          ) {
-            await removeOldResourceCaches();
-          }
-        } catch {
+          // Cache readiness is not proof that the application restored its data.
+          // Only CONFIRM_APP_READY may retire predecessors after profile load.
+        } catch (error) {
           // Repair must never delete a working cache or touch IndexedDB.
           event.ports[0].postMessage({
             type: 'OFFLINE_STATUS',
             ready: false,
             version: build.version,
+            error: errorText(error),
           });
         }
       })(),

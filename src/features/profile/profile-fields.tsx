@@ -1,6 +1,10 @@
 import { AppText } from '@/components/app-text';
 import { ChoiceGroup, FormField, FormGroup } from '@/components/form-controls';
-import { type ProfileDraft, type ProfileSection } from './model';
+import {
+  type DraftUpdate,
+  type ProfileDraft,
+  type ProfileSection,
+} from './model';
 import { activityDescriptions, activityLabels, goalLabels } from './options';
 import { ageFromBirthDate, numeric, type ProfileErrors } from './validation';
 
@@ -26,19 +30,21 @@ export function ProfileFields({
   section: ProfileSection;
   draft: ProfileDraft;
   errors: ProfileErrors;
-  onChange: (draft: ProfileDraft) => void;
+  onChange: (update: DraftUpdate) => void;
   goalOnly?: boolean;
 }) {
   function change<K extends keyof ProfileDraft>(
     key: K,
     value: ProfileDraft[K],
   ) {
-    const next = { ...draft, [key]: value };
-    if (key === 'goal' && value === 'maintain')
-      next.targetWeight = next.currentWeight;
-    if (key === 'currentWeight' && next.goal === 'maintain')
-      next.targetWeight = value;
-    onChange(next);
+    onChange((current) => {
+      const next = { ...current, [key]: value };
+      if (key === 'goal' && value === 'maintain')
+        next.targetWeight = next.currentWeight;
+      if (key === 'currentWeight' && next.goal === 'maintain')
+        next.targetWeight = value;
+      return next;
+    });
   }
   function field(
     key: keyof ProfileDraft,

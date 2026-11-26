@@ -14,6 +14,7 @@ import { sectionTitles } from '@/constants/sections';
 import { SettingsStorageError } from '@/database/settings-contract';
 import {
   AppVersionSection,
+  AppDiagnosticsSection,
   InstallAppSection,
   useUpdateBlocker,
 } from '@/features/pwa/pwa-status';
@@ -106,6 +107,11 @@ export function ProfileScreen() {
           <AppText tone="muted" accessibilityRole="alert">
             Хранилище недоступно. Сейчас используются настройки по умолчанию.
           </AppText>
+          {appSettings.storageRecovery.message && (
+            <AppText tone="error" accessibilityRole="alert">
+              {appSettings.storageRecovery.message}
+            </AppText>
+          )}
           <PrimaryButton
             label={
               appSettings.storageRecovery.pending
@@ -149,6 +155,7 @@ export function ProfileScreen() {
         ))}
       <InstallAppSection />
       <AppVersionSection />
+      <AppDiagnosticsSection />
       {showTheme && (
         <ThemeDialog
           mode={appSettings.settings.themeMode}

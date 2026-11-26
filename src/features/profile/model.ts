@@ -27,6 +27,9 @@ export interface ProfileDraft {
   restrictions: string;
 }
 
+export type DraftUpdate =
+  ProfileDraft | ((previous: ProfileDraft) => ProfileDraft);
+
 export interface UserProfile {
   personal: {
     name: string;

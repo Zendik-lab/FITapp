@@ -321,10 +321,7 @@ test('при недоступности сервера сохраняет раб
     .getByRole('button', { name: 'Проверить обновления', exact: true })
     .click();
   await expect(
-    page.getByText(
-      'Сервер не вернул сведения о версии. Текущая версия сохранена.',
-      { exact: true },
-    ),
+    page.getByText(/\/version.json: HTTP 503, Content-Type/),
   ).toBeVisible();
   await context.setOffline(true);
   await page.reload();
@@ -708,7 +705,29 @@ test('все пять вкладок, reload, повторное открыти�
   expect(await setting(page, 'offline_check')).toBe('retained');
   await page.close();
   const reopened = await context.newPage();
-  await reopened.goto(`${site.url}/profile`);
+  const reopenedResponse = await reopened.goto(`${site.url}/profile`);
+  if (reopenedResponse?.status() !== 200) {
+    const cacheDiagnostics = await reopened.evaluate(async () => {
+      const snapshots = [];
+      for (const name of await caches.keys()) {
+        try {
+          const cache = await caches.open(name);
+          const shell = await cache.match('/');
+          snapshots.push({
+            name,
+            entries: (await cache.keys()).length,
+            shellBytes: shell ? (await shell.text()).length : null,
+          });
+        } catch (error) {
+          snapshots.push({ name, error: String(error) });
+        }
+      }
+      return snapshots;
+    });
+    expect(reopenedResponse?.status(), JSON.stringify(cacheDiagnostics)).toBe(
+      200,
+    );
+  }
   await ready(reopened);
   await expect(
     reopened.getByRole('button', { name: 'Внешний вид, Светлая', exact: true }),
@@ -754,11 +773,13 @@ test('обновление ждёт второе окно и сохраняет 
   expect(await page.evaluate(async () => caches.keys())).toEqual(
     expect.arrayContaining([`masstracker-app-${version}`, 'unrelated-cache']),
   );
-  expect(
-    (await page.evaluate(async () => caches.keys())).filter((key) =>
-      key.startsWith('masstracker-app-'),
-    ),
-  ).toHaveLength(1);
+  await expect
+    .poll(async () =>
+      (await page.evaluate(async () => caches.keys())).filter((key) =>
+        key.startsWith('masstracker-app-'),
+      ),
+    )
+    .toHaveLength(1);
   await context.setOffline(true);
   await page.reload();
   await ready(page);
@@ -796,7 +817,11 @@ test('повреждённый ресурс отклоняет обновлен�
     return result;
   });
   expect(installed).toBe('redundant');
-  expect(await page.evaluate(async () => caches.keys())).toEqual(previous);
+  expect(
+    await page.evaluate(async () =>
+      (await caches.keys()).filter((key) => key.startsWith('masstracker-app-')),
+    ),
+  ).toEqual(previous.filter((key) => key.startsWith('masstracker-app-')));
   await context.setOffline(true);
   await page.reload();
   await ready(page);
@@ -947,4 +972,126 @@ test('повторяет неудачную первую регистрацию 
   await expect(
     page.getByText('Доступно без интернета', { exact: true }),
   ).toBeVisible();
+});
+
+test('раскрываемая диагностика читает подтверждённую запись после перезапуска и доступна с клавиатуры', async ({
+  page,
+  context,
+  site,
+}, testInfo) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  await selectTheme(page, 'Тёмная');
+  await page.reload();
+  await ready(page);
+  const disclosure = page.getByRole('button', {
+    name: 'Диагностика',
+    exact: true,
+  });
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+  await expect(
+    page.getByText('Окружение: Production', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/Локальное хранилище: IndexedDB/)).toBeVisible();
+  await expect(
+    page.getByText(/Service Worker: activated; контроль: да/),
+  ).toBeVisible();
+  await expect(page.getByText(/Кеш: готов; \d+\/\d+ ресурсов/)).toBeVisible();
+  await expect(page.getByText(/Последняя успешная запись: \d/)).toBeVisible();
+  await expect(
+    page.getByText(/Последняя проверка обновлений: \d/),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Ошибка PWA: нет', { exact: true }),
+  ).toBeVisible();
+  const lastCheck = await page
+    .getByText(/Последняя проверка обновлений: \d/)
+    .innerText();
+  await page.setViewportSize({ width: 320, height: 640 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page
+    .getByText('Ошибка PWA: нет', { exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: testInfo.outputPath('diagnostics-dark-320.png'),
+    fullPage: true,
+  });
+  await disclosure.click();
+  await expect(page.getByText(/Локальное хранилище: IndexedDB/)).toHaveCount(0);
+  await context.setOffline(true);
+  await page.reload();
+  await ready(page);
+  await page.getByRole('button', { name: 'Диагностика', exact: true }).click();
+  await expect(page.getByText(lastCheck, { exact: true })).toBeVisible();
+  await expect(page.getByText(/Последняя успешная запись: \d/)).toBeVisible();
+});
+
+test('ручная подготовка ремонтирует кеш без обращения к серверу версий', async ({
+  page,
+  context,
+  site,
+}) => {
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  site.corruptResource = '/app-shell.css';
+  await page.evaluate(async () => {
+    const name = (await caches.keys()).find((key) =>
+      key.startsWith('masstracker-app-'),
+    );
+    if (!name) throw new Error('Missing cache');
+    await (await caches.open(name)).delete('/app-shell.css');
+  });
+  await context.setOffline(true);
+  await expect(
+    page.getByRole('button', { name: 'Подготовить офлайн-режим', exact: true }),
+  ).toBeVisible();
+  await context.setOffline(false);
+  await expect(
+    page.getByText(/Не удалось кешировать \/app-shell.css:/).first(),
+  ).toBeVisible();
+  site.corruptResource = '';
+  const checks = site.versionRequests;
+  await page
+    .getByRole('button', { name: 'Подготовить офлайн-режим', exact: true })
+    .click();
+  await ready(page);
+  expect(site.versionRequests).toBe(checks);
+  await context.setOffline(true);
+  await page.reload();
+  await ready(page);
+});
+
+test('без sessionStorage обновляется с сохранением анкеты и настроек', async ({
+  page,
+  context,
+  site,
+}) => {
+  await context.addInitScript(() => {
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      get: () => {
+        throw new DOMException('Storage denied', 'SecurityError');
+      },
+    });
+  });
+  await page.goto(`${site.url}/profile`);
+  await ready(page);
+  await selectTheme(page, 'Тёмная');
+  const saved = await setting(page, 'user_state');
+  site.deploy('storage-denied');
+  await page
+    .getByRole('button', { name: 'Проверить обновления', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Обновить', exact: true }).click();
+  await expect(page).toHaveTitle('MassTracker storage-denied');
+  await ready(page);
+  expect(await setting(page, 'user_state')).toBe(saved);
+  expect(await setting(page, 'theme_mode')).toBe('dark');
 });

@@ -1,11 +1,11 @@
 import { createContext, use } from 'react';
-import type { ProfileDraft, UserState } from './model';
+import type { DraftUpdate, ProfileDraft, UserState } from './model';
 
 export interface ProfileSession {
   state: UserState;
   pending: boolean;
   failure: string | null;
-  updateDraft(draft: ProfileDraft, step?: number): void;
+  updateDraft(draft: DraftUpdate, step?: number): void;
   goToStep(step: number): Promise<void>;
   retrySave(): Promise<void>;
   complete(draft: ProfileDraft): Promise<void>;

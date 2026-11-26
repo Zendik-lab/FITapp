@@ -35,6 +35,30 @@ test('новый пользователь видит приветствие, о�
   expect(screen.getByLabelText('Имя')).toBeTruthy();
 });
 
+test('быстрые изменения разных полей до нового render не затирают сохранённый черновик', async () => {
+  const storage = await memoryStorage(false);
+  jest.mocked(getSettingsStorage).mockResolvedValue(storage);
+  await renderRouter('./app');
+  await fireEvent.press(await screen.findByRole('button', { name: 'Начать' }));
+  const birthDate: (value: string) => void =
+    screen.getByLabelText('Дата рождения').props.onChangeText;
+  const height: (value: string) => void =
+    screen.getByLabelText('Рост, см').props.onChangeText;
+  await act(async () => {
+    birthDate('01.01.1996');
+    height('180');
+  });
+  const restored = await createProfileRepository(storage).load();
+  expect(restored.onboarding.draft).toMatchObject({
+    birthDate: '01.01.1996',
+    height: '180',
+  });
+  expect(screen.getByLabelText('Дата рождения')).toHaveProp(
+    'value',
+    '01.01.1996',
+  );
+});
+
 test('восстанавливает шаг, завершает анкету и открывает персональное «Сегодня»', async () => {
   const storage = await memoryStorage(false);
   const repository = createProfileRepository(storage);

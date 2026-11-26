@@ -13,15 +13,19 @@ export function PrimaryButton({
   disabled,
   icon,
   secondary = false,
+  expanded,
 }: Action & {
   icon?: AppIconName;
   secondary?: boolean;
+  expanded?: boolean;
 }) {
   const { colors } = useAppTheme();
   const tone = secondary ? 'accentText' : 'onAccent';
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled, expanded }}
+      aria-expanded={expanded}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [

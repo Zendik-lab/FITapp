@@ -125,7 +125,18 @@ function createStorage(database: IDBDatabase): SettingsStorage {
     execute: (store: IDBObjectStore) => Promise<T>,
   ) {
     try {
-      const transaction = database.transaction(storeName, mode);
+      // Request a disk flush before acknowledging a write, including abrupt PWA closure.
+      // Older WebKit versions accept only the two-argument transaction overload.
+      let transaction: IDBTransaction;
+      try {
+        transaction =
+          mode === 'readwrite'
+            ? database.transaction(storeName, mode, { durability: 'strict' })
+            : database.transaction(storeName, mode);
+      } catch (error) {
+        if (!(error instanceof TypeError)) throw error;
+        transaction = database.transaction(storeName, mode);
+      }
       const committed = new Promise<void>((resolve, reject) => {
         transaction.oncomplete = () => resolve();
         transaction.onabort = () => reject(transaction.error);

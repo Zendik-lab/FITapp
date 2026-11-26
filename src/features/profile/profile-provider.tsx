@@ -2,9 +2,14 @@ import { use, useEffect, useRef, useState, type ReactNode } from 'react';
 import { StatusScreen } from '@/components/status-screen';
 import { createProfileRepository } from '@/database/repositories/profile';
 import { getSettingsStorage } from '@/database/settings-storage';
+import {
+  describeError,
+  recordStorageFailure,
+} from '@/database/storage-diagnostics';
 import { AppSettingsContext } from '@/features/settings/app-settings-context';
-import { profileToDraft, type ProfileDraft, type UserState } from './model';
+import { profileToDraft, type DraftUpdate, type UserState } from './model';
 import { ProfileContext } from './profile-context';
+import { useConfirmPwaStartup } from '@/features/pwa/pwa-status';
 
 type Repository = ReturnType<typeof createProfileRepository>;
 type Loaded = { repository: Repository; state: UserState };
@@ -50,6 +55,7 @@ function LoadProfile({ children }: { children: ReactNode }) {
         if (active) setLoaded(value);
       },
       (error: unknown) => {
+        recordStorageFailure(error);
         console.error('[MassTracker] Не удалось загрузить профиль', error);
         if (active)
           setFailure(
@@ -85,6 +91,7 @@ function ReadyProfile({
   initial: Loaded;
   children: ReactNode;
 }) {
+  useConfirmPwaStartup();
   const [state, setState] = useState(initial.state);
   const latest = useRef(state);
   const [pending, setPending] = useState(false);
@@ -95,7 +102,7 @@ function ReadyProfile({
   function report(error: unknown) {
     console.warn('[MassTracker] Не удалось сохранить профиль', error);
     setFailure(
-      'Не удалось сохранить данные. Введённые значения остаются на экране. Повторите сохранение.',
+      `Не удалось сохранить данные. Введённые значения остаются на экране. Повторите сохранение. ${describeError(error)}`,
     );
   }
 
@@ -114,10 +121,14 @@ function ReadyProfile({
   }
 
   function updateDraft(
-    draft: ProfileDraft,
+    update: DraftUpdate,
     step = latest.current.onboarding.step,
   ) {
     if (busy.current) return;
+    const draft =
+      typeof update === 'function'
+        ? update(latest.current.onboarding.draft)
+        : update;
     const next = {
       ...latest.current,
       onboarding: { ...latest.current.onboarding, draft, step },

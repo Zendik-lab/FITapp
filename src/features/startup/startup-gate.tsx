@@ -2,6 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 
 import { StatusScreen } from '@/components/status-screen';
+import {
+  describeError,
+  recordStorageFailure,
+} from '@/database/storage-diagnostics';
 import { AppSettingsProvider } from '@/features/settings/app-settings-provider';
 import {
   defaultAppSettings,
@@ -12,8 +16,8 @@ import { initializeApp } from './initialize-app';
 
 type StartupState =
   | { status: 'loading' }
-  | { status: 'error' }
-  | { status: 'limited'; retrying: boolean }
+  | { status: 'error'; message: string }
+  | { status: 'limited'; retrying: boolean; message: string }
   | { status: 'ready'; settings: AppSettings };
 
 export function StartupGate({ children }: { children: ReactNode }) {
@@ -31,12 +35,14 @@ export function StartupGate({ children }: { children: ReactNode }) {
       },
       (error: unknown) => {
         if (active) {
+          recordStorageFailure(error);
+          const message = describeError(error);
           if (Platform.OS === 'web') {
             console.warn('[MassTracker] Локальное хранилище недоступно', error);
-            setState({ status: 'limited', retrying: false });
+            setState({ status: 'limited', retrying: false, message });
           } else {
             console.error('[MassTracker] Ошибка инициализации', error);
-            setState({ status: 'error' });
+            setState({ status: 'error', message });
           }
         }
       },
@@ -60,7 +66,7 @@ export function StartupGate({ children }: { children: ReactNode }) {
     return (
       <StatusScreen
         title="Не удалось запустить приложение"
-        message="Повторите попытку. Если ошибка сохраняется, перезапустите Expo Go."
+        message={state.message}
         onRetry={retry}
       />
     );
@@ -77,7 +83,7 @@ export function StartupGate({ children }: { children: ReactNode }) {
       }
       storageRecovery={
         state.status === 'limited'
-          ? { retry, pending: state.retrying }
+          ? { retry, pending: state.retrying, message: state.message }
           : undefined
       }
     >

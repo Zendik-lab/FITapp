@@ -1,5 +1,11 @@
 import { currentBuild, isBuildInfo } from './build-info';
-import { readWorkerStatus } from './worker-status';
+import {
+  readInstallFailure,
+  readUpdateCheckTime,
+  saveUpdateCheckTime,
+  readWorkerStatus,
+} from './worker-status';
+import { describeError } from '@/database/storage-diagnostics';
 
 export type OfflinePreparation = 'preparing' | 'ready' | 'unavailable';
 export type UpdateCheck = {
@@ -12,12 +18,24 @@ export type UpdateCheck = {
     | 'offline'
     | 'error';
   message?: string;
+  checkedAt?: string;
+};
+
+export type PwaDiagnostics = {
+  workerState?: string;
+  scope?: string;
+  controlled?: boolean;
+  workerBuildId?: string;
+  resources?: number;
+  cached?: number;
+  error?: string;
 };
 
 export function observeOfflineSupport(
   onStatus: (status: OfflinePreparation) => void,
   onUpdate: (worker: ServiceWorker | null) => void,
   onCheck: (status: UpdateCheck) => void = () => {},
+  onDiagnostics: (status: Partial<PwaDiagnostics>) => void = () => {},
 ) {
   const workers = navigator.serviceWorker;
   let registration: ServiceWorkerRegistration | undefined;
@@ -28,13 +46,17 @@ export function observeOfflineSupport(
   let checkedBuildId: string | undefined;
   let checkState: UpdateCheck['state'] = 'idle';
   let network: AbortController | undefined;
+  let lastCheckedAt: string | undefined;
+  const diagnostics = (value: Partial<PwaDiagnostics>) => {
+    if (!disposed) onDiagnostics(value);
+  };
   const status = (value: OfflinePreparation) => {
     if (!disposed) onStatus(value);
   };
   const check = (value: UpdateCheck) => {
     if (!disposed) {
       checkState = value.state;
-      onCheck(value);
+      onCheck({ ...value, checkedAt: lastCheckedAt });
     }
   };
 
@@ -56,6 +78,18 @@ export function observeOfflineSupport(
         !disposed &&
         (workers.controller ?? registration?.active) === worker
       ) {
+        diagnostics({
+          controlled: workers.controller === worker,
+          workerState: worker.state,
+          workerBuildId: snapshot.version,
+          resources: snapshot.resources,
+          cached: snapshot.cached,
+          error:
+            snapshot.error ??
+            (ready && snapshot.version !== currentBuild().buildId
+              ? `HTML/JS ${currentBuild().buildId}; Service Worker ${snapshot.version}. Требуется согласованная публикация или установка готового обновления.`
+              : undefined),
+        });
         status(
           ready && snapshot.version === currentBuild().buildId
             ? 'ready'
@@ -74,7 +108,8 @@ export function observeOfflineSupport(
           check({ state: 'current' });
         }
       }
-    } catch {
+    } catch (error) {
+      diagnostics({ error: describeError(error) });
       if (workers.controller === worker) status('unavailable');
     } finally {
       checking = false;
@@ -86,14 +121,32 @@ export function observeOfflineSupport(
   function sync() {
     if (disposed) return;
     const waiting = registration?.waiting ?? null;
+    diagnostics({
+      scope: registration?.scope,
+      controlled: Boolean(workers.controller),
+      workerState:
+        registration?.installing?.state ??
+        waiting?.state ??
+        registration?.active?.state ??
+        'не зарегистрирован',
+    });
     onUpdate(waiting);
     if (waiting) check({ state: 'available' });
-    else if (installing?.state === 'redundant')
-      check({
-        state: 'error',
-        message:
-          'Не удалось загрузить обновление. Текущая версия сохранена. Повторите проверку.',
-      });
+    else if (installing?.state === 'redundant') {
+      if (!workers.controller) status('unavailable');
+      void readInstallFailure(undefined, lastCheckedAt)
+        .catch(describeError)
+        .then((failure) => {
+          if (disposed) return;
+          diagnostics({ error: failure });
+          check({
+            state: 'error',
+            message:
+              failure ??
+              'Установка Service Worker завершилась состоянием redundant. Текущая версия сохранена. Повторите проверку.',
+          });
+        });
+    }
     if (workers.controller) void verifyActive();
     else
       status(
@@ -123,11 +176,11 @@ export function observeOfflineSupport(
           registration.addEventListener('updatefound', watchInstall);
           watchInstall();
         }
-      } catch {
+      } catch (error) {
+        diagnostics({ error: describeError(error) });
         check({
           state: 'error',
-          message:
-            'Не удалось проверить готовность обновления. Повторите попытку.',
+          message: describeError(error),
         });
       } finally {
         registering = false;
@@ -151,6 +204,13 @@ export function observeOfflineSupport(
       installing = null;
     }
     registering = true;
+    lastCheckedAt = new Date().toISOString();
+    void saveUpdateCheckTime(lastCheckedAt).catch((error: unknown) => {
+      console.warn(
+        '[MassTracker] Не удалось сохранить время проверки обновлений',
+        error,
+      );
+    });
     check({ state: 'checking' });
     if (!workers.controller) status('preparing');
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -191,12 +251,12 @@ export function observeOfflineSupport(
           !response.headers.get('content-type')?.includes('application/json')
         )
           throw new Error(
-            'Сервер не вернул сведения о версии. Текущая версия сохранена.',
+            `/version.json: HTTP ${response.status}, Content-Type ${response.headers.get('content-type') ?? 'отсутствует'}. Требуется полный production-экспорт.`,
           );
         const info: unknown = await response.json();
         if (!isBuildInfo(info))
           throw new Error(
-            'Не удалось проверить версию приложения. Повторите попытку.',
+            '/version.json: неверный формат buildId/appVersion. Требуется полный production-экспорт.',
           );
         checkedBuildId = info.buildId;
         if (registration.waiting) {
@@ -226,14 +286,17 @@ export function observeOfflineSupport(
       }
     } catch (error) {
       if (!workers.controller) status('unavailable');
+      const failure = await readInstallFailure(
+        checkedBuildId ?? currentBuild().buildId,
+        lastCheckedAt,
+      ).catch(() => undefined);
+      const message = failure ?? describeError(error);
+      diagnostics({ error: message });
       check(
         navigator.onLine
           ? {
               state: 'error',
-              message:
-                error instanceof Error && error.name === 'Error'
-                  ? error.message
-                  : 'Не удалось проверить обновления. Повторите попытку.',
+              message,
             }
           : { state: 'offline' },
       );
@@ -241,6 +304,14 @@ export function observeOfflineSupport(
       clearTimeout(timeout);
       registering = false;
     }
+  }
+
+  async function prepareOffline() {
+    if (disposed) return;
+    status('preparing');
+    diagnostics({ error: undefined });
+    if (workers.controller || registration?.active) await verifyActive();
+    else await prepare();
   }
 
   function onVisible() {
@@ -255,10 +326,21 @@ export function observeOfflineSupport(
   window.addEventListener('online', onOnline);
   window.addEventListener('offline', sync);
   const interval = setInterval(onVisible, 60 * 60 * 1000);
-  void prepare();
+  void readUpdateCheckTime()
+    .catch(() => undefined)
+    .then((time) => {
+      lastCheckedAt ??= time;
+      if (!disposed) void prepare();
+    });
 
   return {
     prepare: () => {
+      void prepareOffline().catch((error: unknown) => {
+        status('unavailable');
+        diagnostics({ error: describeError(error) });
+      });
+    },
+    checkUpdates: () => {
       void prepare();
     },
     dispose: () => {

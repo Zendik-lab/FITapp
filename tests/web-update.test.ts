@@ -147,3 +147,15 @@ test('форма, открытая во время ожидания commit, от
     close();
   }
 });
+
+test('запрет sessionStorage не блокирует безопасное обновление и commit данных', async () => {
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    get: () => {
+      throw new DOMException('Storage denied', 'SecurityError');
+    },
+  });
+  await expect(activateUpdate(worker)).resolves.toBeUndefined();
+  expect(worker.postMessage).toHaveBeenCalledTimes(1);
+  expect(reload).toHaveBeenCalledTimes(1);
+});

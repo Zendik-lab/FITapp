@@ -1,6 +1,6 @@
 /** @jest-environment node */
 
-import { IDBFactory, IDBObjectStore } from 'fake-indexeddb';
+import { IDBDatabase, IDBFactory, IDBObjectStore } from 'fake-indexeddb';
 
 import { openIndexedDbSettings } from '@/database/settings-storage.web';
 
@@ -42,6 +42,31 @@ test('сообщает о недоступности базы с исходно�
     cause,
   });
   await expect(openIndexedDbSettings(factory)).resolves.toBeDefined();
+});
+
+test('запрашивает строгую фиксацию данных и поддерживает старый WebKit без третьего аргумента', async () => {
+  const storage = await openIndexedDbSettings(new IDBFactory());
+  const transaction = IDBDatabase.prototype.transaction;
+  const calls: (IDBTransactionOptions | undefined)[] = [];
+  const intercepted = jest
+    .spyOn(IDBDatabase.prototype, 'transaction')
+    .mockImplementation(function (
+      this: IDBDatabase,
+      names: string | Iterable<string>,
+      mode?: IDBTransactionMode,
+      options?: IDBTransactionOptions,
+    ) {
+      calls.push(options);
+      if (options) throw new TypeError('Legacy WebKit overload');
+      return transaction.call(this, names, mode);
+    });
+  try {
+    await storage.apply([{ key: 'theme_mode', value: 'dark' }]);
+    expect(calls.slice(0, 2)).toEqual([{ durability: 'strict' }, undefined]);
+    expect(await storage.get('theme_mode')).toBe('dark');
+  } finally {
+    intercepted.mockRestore();
+  }
 });
 
 test('откатывает всю запись при превышении квоты в середине пакета', async () => {

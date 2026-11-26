@@ -1,6 +1,58 @@
 import { currentBuild } from './build-info';
 
-export type WorkerStatus = { ready: boolean; version: string };
+export type WorkerStatus = {
+  ready: boolean;
+  version: string;
+  resources?: number;
+  cached?: number;
+  error?: string;
+};
+
+const diagnosticCache = 'masstracker-diagnostics';
+const checkPath = '/__masstracker_update_check__';
+
+export async function readUpdateCheckTime(): Promise<string | undefined> {
+  const response = await caches.match(checkPath, {
+    cacheName: diagnosticCache,
+  });
+  if (!response) return;
+  const value: unknown = await response.json();
+  if (typeof value === 'string' && Number.isFinite(Date.parse(value)))
+    return value;
+}
+
+export async function saveUpdateCheckTime(value: string) {
+  const cache = await caches.open(diagnosticCache);
+  await cache.put(
+    checkPath,
+    new Response(JSON.stringify(value), {
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+}
+
+export async function readInstallFailure(
+  buildId?: string,
+  since?: string,
+): Promise<string | undefined> {
+  const response = await caches.match('/__masstracker_install_failure__', {
+    cacheName: diagnosticCache,
+  });
+  if (!response) return;
+  const data: unknown = await response.json();
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    'error' in data &&
+    typeof data.error === 'string' &&
+    (!since ||
+      ('occurredAt' in data &&
+        typeof data.occurredAt === 'string' &&
+        data.occurredAt >= since)) &&
+    (!buildId || ('buildId' in data && data.buildId === buildId))
+  )
+    return data.error;
+}
 
 export function readWorkerStatus(
   worker: ServiceWorker,
@@ -18,7 +70,7 @@ export function readWorkerStatus(
       () =>
         finish(
           new Error(
-            'Не удалось проверить готовность обновления. Повторите попытку.',
+            `Service Worker не ответил за ${repair ? 55 : 5} с (${repair ? 'PREPARE_OFFLINE' : 'GET_OFFLINE_STATUS'}).`,
           ),
         ),
       repair ? 55_000 : 5_000,
@@ -35,7 +87,19 @@ export function readWorkerStatus(
         typeof data.version === 'string' &&
         /^[a-f0-9]{20}$/.test(data.version)
       ) {
-        finish(undefined, { ready: data.ready, version: data.version });
+        finish(undefined, {
+          ready: data.ready,
+          version: data.version,
+          ...('resources' in data && typeof data.resources === 'number'
+            ? { resources: data.resources }
+            : {}),
+          ...('cached' in data && typeof data.cached === 'number'
+            ? { cached: data.cached }
+            : {}),
+          ...('error' in data && typeof data.error === 'string'
+            ? { error: data.error }
+            : {}),
+        });
       } else finish(new Error('Получен некорректный ответ обновления.'));
     };
     try {

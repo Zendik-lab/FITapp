@@ -1,3 +1,8 @@
+import {
+  recordStorageFailure,
+  recordStorageWrite,
+} from './storage-diagnostics';
+
 const pendingWrites = new Set<Promise<void>>();
 let paused = false;
 let queue: Promise<void> | undefined;
@@ -15,6 +20,10 @@ export async function trackSettingsWrite(write: () => Promise<void>) {
   pendingWrites.add(operation);
   try {
     await operation;
+    recordStorageWrite();
+  } catch (error) {
+    recordStorageFailure(error);
+    throw error;
   } finally {
     pendingWrites.delete(operation);
   }

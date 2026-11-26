@@ -61,7 +61,16 @@ function environment() {
     caches,
     fetch,
     Response,
-    Request,
+    Request: class extends Request {
+      constructor(input, init) {
+        super(
+          typeof input === 'string'
+            ? new URL(input, self.location.origin)
+            : input,
+          init,
+        );
+      }
+    },
     Headers,
     URL,
     AbortController,
@@ -106,8 +115,88 @@ test('проверяет окна после ожидания кеша, вклю
 test('подтверждение новой сборки сохраняет предшественников при другом работающем окне', async () => {
   const env = environment();
   env.windows.push({ id: 'old-window', url: 'https://app.test/nutrition' });
+  await message(env, 'CONFIRM_APP_READY');
+  expect(env.caches.delete).not.toHaveBeenCalled();
+});
+
+test('проверка кеша до успешного чтения профиля не удаляет рабочую предыдущую сборку', async () => {
+  const env = environment();
   await message(env, 'GET_OFFLINE_STATUS');
   expect(env.caches.delete).not.toHaveBeenCalled();
+});
+
+test('очистка предшественника требует подтверждения успешного запуска приложения', async () => {
+  const env = environment();
+  await message(env, 'CONFIRM_APP_READY');
+  expect(env.caches.delete).toHaveBeenCalledWith(`masstracker-app-${previous}`);
+  expect(env.caches.delete).not.toHaveBeenCalledWith(
+    `masstracker-app-${current}`,
+  );
+});
+
+test('ошибка ремонта кеша содержит конкретный ресурс и сохраняет рабочую версию', async () => {
+  const env = environment();
+  env.caches.open.mockImplementation(async () => ({
+    match: async (path) =>
+      path === '/app-shell.css' ? undefined : new Response('shell'),
+    put: jestMock.fn(),
+  }));
+  env.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+  const port = await message(env, 'PREPARE_OFFLINE');
+  expect(port.postMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ready: false,
+      error: expect.stringContaining('/app-shell.css'),
+    }),
+  );
+  expect(env.caches.delete).not.toHaveBeenCalled();
+});
+
+test('отклоняет правильные байты CSS с HTML MIME, сохраняя рабочие кеши', async () => {
+  const env = environment();
+  env.caches.open.mockImplementation(async () => ({
+    match: async (path) =>
+      path === '/app-shell.css' ? undefined : new Response('shell'),
+    put: jestMock.fn(),
+  }));
+  env.fetch.mockResolvedValue(
+    new Response('body {}', { headers: { 'Content-Type': 'text/html' } }),
+  );
+  const port = await message(env, 'PREPARE_OFFLINE');
+  expect(port.postMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      ready: false,
+      error: expect.stringMatching(/MIME.*app-shell.css|app-shell.css.*MIME/),
+    }),
+  );
+  expect(env.caches.delete).not.toHaveBeenCalled();
+});
+
+test('успешная повторная установка удаляет прежнюю ошибку этой же сборки', async () => {
+  const env = environment();
+  const removeFailure = jestMock.fn(async () => true);
+  const open = env.caches.open.getMockImplementation();
+  env.caches.open.mockImplementation(async (key) =>
+    key === 'masstracker-diagnostics'
+      ? {
+          match: async () =>
+            new Response(
+              JSON.stringify({ buildId: current, error: 'Previous failure' }),
+            ),
+          delete: removeFailure,
+        }
+      : open(key),
+  );
+  let installed;
+  env.handlers.get('install')({
+    waitUntil: (pending) => {
+      installed = pending;
+    },
+  });
+  await installed;
+  expect(removeFailure).toHaveBeenCalledWith(
+    '/__masstracker_install_failure__',
+  );
 });
 
 test.each([
