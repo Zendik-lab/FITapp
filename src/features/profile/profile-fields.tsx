@@ -49,19 +49,20 @@ export function ProfileFields({
   function field(
     key: keyof ProfileDraft,
     label: string,
-    numericInput = false,
+    inputMode: 'text' | 'numeric' | 'decimal' = 'text',
     hint?: string,
     multiline = false,
   ) {
     return (
       <FormField
+        key={key}
         name={key}
         label={label}
         value={draft[key]}
         onChangeText={(value) => change(key, value)}
         error={errors[key]}
         hint={hint}
-        keyboardType={numericInput ? 'decimal-pad' : 'default'}
+        inputMode={inputMode}
         multiline={multiline}
       />
     );
@@ -80,6 +81,9 @@ export function ProfileFields({
           hint={age === null ? 'Формат: ДД.ММ.ГГГГ' : `Возраст: ${age}`}
           placeholder="ДД.ММ.ГГГГ"
           keyboardType="numbers-and-punctuation"
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
           maxLength={10}
         />
         <ChoiceGroup
@@ -99,8 +103,8 @@ export function ProfileFields({
   if (section === 'body')
     return (
       <FormGroup>
-        {field('height', 'Рост, см', true)}
-        {field('currentWeight', 'Текущий вес, кг', true)}
+        {field('height', 'Рост, см', 'decimal')}
+        {field('currentWeight', 'Текущий вес, кг', 'decimal')}
       </FormGroup>
     );
   if (section === 'goal') {
@@ -131,7 +135,7 @@ export function ProfileFields({
         {field(
           'targetWeight',
           'Целевой вес, кг',
-          true,
+          'decimal',
           draft.goal === 'maintain'
             ? 'Для поддержания целевой вес равен текущему.'
             : undefined,
@@ -163,7 +167,7 @@ export function ProfileFields({
               ]}
             />
             {draft.paceMode === 'custom' &&
-              field('pace', 'Темп, кг в неделю', true)}
+              field('pace', 'Темп, кг в неделю', 'decimal')}
           </>
         ) : (
           <AppText tone="muted">Темп изменения веса: 0 кг в неделю.</AppText>
@@ -196,7 +200,7 @@ export function ProfileFields({
         {field(
           'sessions',
           'Тренировок в неделю',
-          true,
+          'numeric',
           'От 0 до 14. Укажите 0, если пока не тренируетесь.',
         )}
         {numeric(draft.sessions) > 0 && (
@@ -233,22 +237,22 @@ export function ProfileFields({
       <AppText tone="muted">
         Все поля необязательны. Их можно заполнить позже в профиле.
       </AppText>
-      {field('meals', 'Приёмов пищи в день', true)}
+      {field('meals', 'Приёмов пищи в день', 'numeric')}
       {field(
         'diet',
         'Предпочтительный режим питания',
-        false,
+        'text',
         'Например: обычный, вегетарианский, без особого режима.',
       )}
       {field(
         'excludedFoods',
         'Не употребляю',
-        false,
+        'text',
         'Перечислите продукты или оставьте поле пустым.',
         true,
       )}
-      {field('allergies', 'Аллергии', false, undefined, true)}
-      {field('restrictions', 'Пищевые ограничения', false, undefined, true)}
+      {field('allergies', 'Аллергии', 'text', undefined, true)}
+      {field('restrictions', 'Пищевые ограничения', 'text', undefined, true)}
     </FormGroup>
   );
 }

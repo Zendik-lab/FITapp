@@ -1,4 +1,10 @@
-import { createContext, use, type ReactNode, type RefObject } from 'react';
+import {
+  createContext,
+  use,
+  useCallback,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -22,6 +28,8 @@ export function FormField({
   label,
   error,
   hint,
+  inputMode,
+  keyboardType,
   ...props
 }: TextInputProps & {
   name: string;
@@ -32,6 +40,15 @@ export function FormField({
   const { colors } = useAppTheme();
   const fields = use(FieldFocusContext);
   const disabled = use(FormDisabledContext);
+  const registerField = useCallback(
+    (input: TextInputInstance | null) => {
+      if (!fields) return;
+      if (input) fields.current.set(name, input);
+      else fields.current.delete(name);
+    },
+    [fields, name],
+  );
+  const numericInput = inputMode === 'numeric' || inputMode === 'decimal';
   const descriptionId = error
     ? `${name}-error`
     : hint
@@ -44,10 +61,19 @@ export function FormField({
       </AppText>
       <TextInput
         editable={!disabled}
-        ref={(input) => {
-          if (input) fields?.current.set(name, input);
-          else fields?.current.delete(name);
-        }}
+        ref={registerField}
+        inputMode={inputMode}
+        keyboardType={
+          keyboardType ??
+          (inputMode === 'decimal'
+            ? 'decimal-pad'
+            : inputMode === 'numeric'
+              ? 'number-pad'
+              : 'default')
+        }
+        autoCorrect={!numericInput}
+        autoCapitalize={numericInput ? 'none' : 'sentences'}
+        spellCheck={!numericInput}
         nativeID={name}
         accessibilityLabel={label}
         aria-labelledby={`${name}-label`}

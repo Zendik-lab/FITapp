@@ -68,7 +68,9 @@ export function FormScreen({
         <ScrollView
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
+          // React Native Web dismisses on every scroll event in on-drag mode,
+          // including Safari's automatic scrolling to keep the caret visible.
+          keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
           automaticallyAdjustKeyboardInsets
           indicatorStyle={isDark ? 'white' : 'black'}
           contentContainerStyle={styles.content}

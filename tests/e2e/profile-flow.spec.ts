@@ -18,6 +18,97 @@ test.afterAll(async () => {
   await new Promise<void>((done) => server.close(() => done()));
 });
 
+test('посимвольный ввод сохраняет фокус и курсор после автосохранения', async ({
+  page,
+}) => {
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Начать', exact: true }).click();
+  const name = page.getByLabel('Имя', { exact: true });
+  const original = await name.elementHandle();
+  await name.focus();
+  for (const character of 'Alex') {
+    await page.keyboard.type(character);
+    await expect(name).toBeFocused();
+    await expect(
+      page.getByText('Ответы сохранены на устройстве.', { exact: true }),
+    ).toBeVisible();
+    expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+  }
+  await expect(name).toHaveValue('Alex');
+  await name.evaluate((node: HTMLInputElement) => node.setSelectionRange(1, 3));
+  await page.keyboard.type('i');
+  await expect(name).toHaveValue('Aix');
+  await expect(name).toBeFocused();
+  expect(
+    await name.evaluate((node: HTMLInputElement) => [
+      node.selectionStart,
+      node.selectionEnd,
+    ]),
+  ).toEqual([2, 2]);
+});
+
+for (const standalone of [false, true]) {
+  test(`прокрутка формы при вводе не закрывает клавиатуру (standalone=${standalone})`, async ({
+    page,
+  }) => {
+    if (standalone) {
+      // Exercise the installed-mode code path; this is not an installed iOS PWA.
+      await page.addInitScript(() =>
+        Object.defineProperty(navigator, 'standalone', { get: () => true }),
+      );
+    }
+    await page.goto(url);
+    await page.getByRole('button', { name: 'Начать', exact: true }).click();
+    const height = page.getByLabel('Рост, см', { exact: true });
+    await height.focus();
+    await page.keyboard.type('1');
+    // Safari scrolls the form to keep the caret visible as the keyboard and
+    // visual viewport change. Use a real scroll, without any touch/drag gesture.
+    const scroll = await height.evaluate(async (input) => {
+      let parent = input.parentElement;
+      while (parent) {
+        if (
+          parent.scrollHeight > parent.clientHeight &&
+          /auto|scroll/.test(getComputedStyle(parent).overflowY)
+        ) {
+          const before = parent.scrollTop;
+          const scrolled = new Promise<void>((resolve) =>
+            parent?.addEventListener('scroll', () => resolve(), { once: true }),
+          );
+          parent.scrollTop = before > 24 ? before - 24 : before + 24;
+          const changed = parent.scrollTop !== before;
+          if (changed) await scrolled;
+          return changed;
+        }
+        parent = parent.parentElement;
+      }
+      return false;
+    });
+    expect(scroll).toBe(true);
+    await expect(height).toBeFocused();
+    await page.keyboard.type('80,5');
+    await expect(height).toHaveValue('180,5');
+    await expect(height).toBeFocused();
+    await page.setViewportSize({ width: 390, height: 500 });
+    await expect(height).toBeFocused();
+    await page.keyboard.press('Backspace');
+    await expect(height).toHaveValue('180,');
+    await expect(height).toBeFocused();
+    await height.press('Enter');
+    await expect(height).not.toBeFocused();
+  });
+}
+
+test('целочисленные поля используют цифровую клавиатуру', async ({ page }) => {
+  await reachSummary(page);
+  await page
+    .getByRole('button', { name: 'Изменить: Тренировки', exact: true })
+    .click();
+  await expect(
+    page.getByLabel('Тренировок в неделю', { exact: true }),
+  ).toHaveAttribute('inputmode', 'numeric');
+});
+
 test('быстрый ввод двух полей одним пакетом переживает reload без потери даты рождения', async ({
   page,
 }) => {
@@ -54,6 +145,173 @@ test('быстрый ввод двух полей одним пакетом пе
 async function continueStep(page: Page) {
   await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
 }
+
+async function typeField(
+  page: Page,
+  label: string,
+  value: string,
+  inputMode: 'text' | 'numeric' | 'decimal' = 'text',
+  autosave = false,
+) {
+  const field = page.getByLabel(label, { exact: true });
+  const original = await field.evaluateHandle((node) => node);
+  if (inputMode !== 'text') {
+    await expect(field).toHaveAttribute('inputmode', inputMode);
+    // A text input with a keypad hint accepts both decimal separators and
+    // intermediate values, and supports selection APIs unlike type=number.
+    await expect(field).toHaveAttribute('type', 'text');
+  }
+  await field.focus();
+  await field.evaluate((node: HTMLInputElement | HTMLTextAreaElement) =>
+    node.setSelectionRange(0, node.value.length),
+  );
+  await page.keyboard.press('Backspace');
+  await expect(field).toHaveValue('');
+  await expect(field).toBeFocused();
+  let expected = '';
+  for (const character of value) {
+    await page.keyboard.type(character);
+    expected += character;
+    await expect(field).toHaveValue(expected);
+    await expect(field).toBeFocused();
+    if (autosave) {
+      await expect(
+        page.getByText('Ответы сохранены на устройстве.', { exact: true }),
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+    }
+    expect(await original.evaluate((node) => node.isConnected)).toBe(true);
+    expect(
+      await field.evaluate(
+        (node: HTMLInputElement | HTMLTextAreaElement) => node.selectionStart,
+      ),
+    ).toBe(expected.length);
+  }
+  await original.dispose();
+}
+
+test('все поля анкеты и профиля допускают посимвольное редактирование', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Начать', exact: true }).click();
+  // Validation must preserve editable raw text, even while errors are visible.
+  await continueStep(page);
+  await typeField(page, 'Имя', 'Алекс', 'text', true);
+  await typeField(page, 'Дата рождения', '01.01.1996', 'text', true);
+  await expect(page.getByText(/^Возраст: \d+$/)).toBeVisible();
+  await page.getByRole('radio', { name: 'Мужской', exact: true }).click();
+  await typeField(page, 'Рост, см', '180.5', 'decimal', true);
+  await typeField(page, 'Текущий вес, кг', '70,5', 'decimal', true);
+  // Replace a digit in the middle without changing the separator or caret.
+  const weight = page.getByLabel('Текущий вес, кг', { exact: true });
+  await weight.evaluate((node: HTMLInputElement) =>
+    node.setSelectionRange(1, 2),
+  );
+  await page.keyboard.type('1');
+  await expect(weight).toHaveValue('71,5');
+  await expect(weight).toBeFocused();
+  expect(
+    await weight.evaluate((node: HTMLInputElement) => node.selectionStart),
+  ).toBe(2);
+  await continueStep(page);
+  await page.getByRole('radio', { name: 'Набор массы', exact: true }).click();
+  await continueStep(page);
+  await typeField(page, 'Целевой вес, кг', '76.25', 'decimal', true);
+  await page.getByRole('radio', { name: 'Свой темп', exact: true }).click();
+  await typeField(page, 'Темп, кг в неделю', '0,35', 'decimal', true);
+  await continueStep(page);
+  await page
+    .getByRole('radio', { name: 'Средняя активность', exact: true })
+    .click();
+  await continueStep(page);
+  await typeField(page, 'Тренировок в неделю', '14', 'numeric', true);
+  await page.getByRole('radio', { name: 'Силовые', exact: true }).click();
+  await page.getByRole('radio', { name: 'Начинающий', exact: true }).click();
+  await continueStep(page);
+  await typeField(page, 'Приёмов пищи в день', '10', 'numeric', true);
+  await typeField(
+    page,
+    'Предпочтительный режим питания',
+    'Обычный',
+    'text',
+    true,
+  );
+  await typeField(page, 'Не употребляю', 'Рыба\nМясо', 'text', true);
+  await typeField(page, 'Аллергии', 'Орехи', 'text', true);
+  await typeField(page, 'Пищевые ограничения', 'Нет', 'text', true);
+  await continueStep(page);
+  await page
+    .getByRole('button', { name: 'Создать мой профиль', exact: true })
+    .click();
+  await expect(page.getByText('Привет, Алекс!', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+
+  const edits: readonly {
+    section: RegExp;
+    fields: readonly [string, string, ('text' | 'numeric' | 'decimal')?][];
+  }[] = [
+    {
+      section: /^Личная информация,/,
+      fields: [
+        ['Имя', 'Мария'],
+        ['Дата рождения', '02.03.1995'],
+      ],
+    },
+    {
+      section: /^Параметры тела,/,
+      fields: [
+        ['Рост, см', '175,5', 'decimal'],
+        ['Текущий вес, кг', '72.25', 'decimal'],
+      ],
+    },
+    {
+      section: /^Моя цель,/,
+      fields: [
+        ['Целевой вес, кг', '77,5', 'decimal'],
+        ['Темп, кг в неделю', '0.25', 'decimal'],
+      ],
+    },
+    {
+      section: /^Тренировки,/,
+      fields: [['Тренировок в неделю', '12', 'numeric']],
+    },
+    {
+      section: /^Пищевые предпочтения,/,
+      fields: [
+        ['Приёмов пищи в день', '4', 'numeric'],
+        ['Предпочтительный режим питания', 'Обычный'],
+        ['Не употребляю', 'Мясо\nРыба'],
+        ['Аллергии', 'Нет'],
+        ['Пищевые ограничения', 'Нет'],
+      ],
+    },
+  ];
+  for (const edit of edits) {
+    await page.getByRole('button', { name: edit.section }).click();
+    for (const [label, value, mode] of edit.fields) {
+      await typeField(page, label, value, mode);
+    }
+    await page
+      .getByRole('button', { name: 'Сохранить изменения', exact: true })
+      .click();
+    await expect(
+      page.getByText('Профиль обновлён.', { exact: true }),
+    ).toBeVisible();
+  }
+  await page.reload();
+  await page.getByRole('button', { name: /^Параметры тела,/ }).click();
+  await expect(page.getByLabel('Рост, см', { exact: true })).toHaveValue(
+    '175.5',
+  );
+  await expect(page.getByLabel('Текущий вес, кг', { exact: true })).toHaveValue(
+    '72.25',
+  );
+  expect(errors).toEqual([]);
+});
 
 async function reachSummary(page: Page) {
   await page.goto(url);
@@ -115,6 +373,61 @@ async function reachSummary(page: Page) {
     page.getByRole('heading', { name: 'Всё готово', exact: true }),
   ).toBeVisible();
 }
+
+test('ошибка автосохранения и отключение сети сохраняют редактируемое поле', async ({
+  page,
+  context,
+}) => {
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Начать', exact: true }).click();
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (
+      value: unknown,
+      key?: IDBValidKey,
+    ) {
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        'key' in value &&
+        value.key === 'user_state'
+      )
+        throw new DOMException('test quota', 'QuotaExceededError');
+      return key === undefined
+        ? put.call(this, value)
+        : put.call(this, value, key);
+    };
+    Object.defineProperty(window, 'restoreProfileWrites', {
+      value: () => {
+        IDBObjectStore.prototype.put = put;
+      },
+    });
+  });
+  await typeField(page, 'Имя', 'Алекс');
+  await expect(page.getByText(/Не удалось сохранить данные/)).toBeVisible();
+  const name = page.getByLabel('Имя', { exact: true });
+  await expect(name).toBeFocused();
+  await context.setOffline(true);
+  await expect(page.getByText('Офлайн', { exact: true })).toBeVisible();
+  await expect(name).toBeFocused();
+  await page.keyboard.type('андр');
+  await expect(name).toHaveValue('Александр');
+  await expect(name).toBeFocused();
+  await page.evaluate(() => {
+    const restore: unknown = Reflect.get(window, 'restoreProfileWrites');
+    if (typeof restore !== 'function')
+      throw new Error('Missing write recovery');
+    restore();
+  });
+  // The next input retries persistence without moving focus to a retry button.
+  await page.keyboard.press('Backspace');
+  await expect(
+    page.getByText('Ответы сохранены на устройстве.', { exact: true }),
+  ).toBeVisible();
+  await expect(name).toBeFocused();
+  await page.reload();
+  await expect(name).toHaveValue('Александ');
+});
 
 test('анкета, восстановление, редактирование, темы и повторное прохождение без потери данных', async ({
   page,
