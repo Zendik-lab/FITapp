@@ -83,6 +83,13 @@ test('сохраняет URL ресурсов scoped-пакетов с @', () =>
   ).toContain('/assets/@local/icon.svg');
 });
 
+test('не запрашивает служебный HTML 404 через precache: Pages канонизирует HTML URL', () => {
+  writeFileSync(join(directory, '404.html'), '<html>Not found</html>');
+  expect(
+    generateServiceWorker(directory).resources.map(([url]) => url),
+  ).not.toContain('/404.html');
+});
+
 test('публикует согласованные идентификаторы HTML, worker и version.json', () => {
   const build = generateServiceWorker(directory, {
     buildId: '1234567890abcdef1234',

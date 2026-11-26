@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const { resolve } = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { generateServiceWorker } = require('./pwa-export.cjs');
+const { verifyWebBuild } = require('./verify-web.cjs');
 
 const root = resolve(__dirname, '..');
 const result = spawnSync(
@@ -17,4 +18,11 @@ const build = generateServiceWorker(resolve(root, 'dist'), {
 });
 console.log(
   `PWA ${build.version}: ${build.resources.length} resources (including HTML) verified for precache.`,
+);
+verifyWebBuild(resolve(root, 'dist')).then(
+  () => console.log('Production PWA export integrity verified.'),
+  (error) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
 );

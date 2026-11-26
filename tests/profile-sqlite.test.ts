@@ -5,6 +5,9 @@ import { getSettingsStorage } from '@/database/settings-storage';
 import { createProfileRepository } from '@/database/repositories/profile';
 import { initialMigration } from '@/database/migrations/001-initial';
 import { sampleDraft } from './fixtures/profile';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, sep } from 'node:path';
 
 let sql: DatabaseSync;
 function bindings(params: unknown[]): SQLInputValue[] {
@@ -77,4 +80,36 @@ test('реальный SQLite обновляет схему v1 и сохраня
   expect(
     sql.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
   ).toEqual([{ version: 1 }, { version: 2 }]);
+});
+
+test('файловый SQLite восстанавливает профиль, анкету, цель и тему после закрытия соединения', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'masstracker-sqlite-'));
+  const file = join(directory, 'masstracker.db');
+  sql.close();
+  sql = new DatabaseSync(file);
+  try {
+    await migrateDatabase(mockDatabase);
+    const storage = await getSettingsStorage();
+    await storage.apply([{ key: 'theme_mode', value: 'dark' }]);
+    await createProfileRepository(storage).complete({
+      ...sampleDraft,
+      name: 'На диске',
+      targetWeight: '79',
+    });
+    sql.close();
+    sql = new DatabaseSync(file);
+    await migrateDatabase(mockDatabase);
+    const reopened = await getSettingsStorage();
+    const state = await createProfileRepository(reopened).load();
+    expect(state.onboarding.completed).toBe(true);
+    expect(state.profile?.personal.name).toBe('На диске');
+    expect(state.profile?.goals.targetWeightKg).toBe(79);
+    expect(await reopened.get('theme_mode')).toBe('dark');
+  } finally {
+    sql.close();
+    sql = new DatabaseSync(':memory:');
+    if (!resolve(directory).startsWith(resolve(tmpdir()) + sep))
+      throw new Error('Unsafe SQLite test cleanup');
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

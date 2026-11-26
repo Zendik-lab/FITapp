@@ -25,12 +25,17 @@ export function observeOfflineSupport(
   let disposed = false;
   let registering = false;
   let checking = false;
+  let checkedBuildId: string | undefined;
+  let checkState: UpdateCheck['state'] = 'idle';
   let network: AbortController | undefined;
   const status = (value: OfflinePreparation) => {
     if (!disposed) onStatus(value);
   };
   const check = (value: UpdateCheck) => {
-    if (!disposed) onCheck(value);
+    if (!disposed) {
+      checkState = value.state;
+      onCheck(value);
+    }
   };
 
   async function verifyActive() {
@@ -59,6 +64,14 @@ export function observeOfflineSupport(
         if (ready && snapshot.version !== currentBuild().buildId) {
           onUpdate(registration?.waiting ?? worker);
           check({ state: 'available' });
+        } else if (
+          ready &&
+          checkedBuildId === snapshot.version &&
+          (checkState === 'downloading' || checkState === 'available') &&
+          !registration?.installing &&
+          !registration?.waiting
+        ) {
+          check({ state: 'current' });
         }
       }
     } catch {
@@ -185,6 +198,7 @@ export function observeOfflineSupport(
           throw new Error(
             'Не удалось проверить версию приложения. Повторите попытку.',
           );
+        checkedBuildId = info.buildId;
         if (registration.waiting) {
           sync();
         } else if (registration.installing) check({ state: 'downloading' });

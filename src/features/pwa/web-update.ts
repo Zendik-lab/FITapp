@@ -6,6 +6,17 @@ import { currentBuild } from './build-info';
 import { isUpdateBlocked } from './update-safety';
 import { readWorkerStatus } from './worker-status';
 
+const reloadKey = 'masstracker:last-update-reload';
+
+export function wasUpdateInstalled(): boolean {
+  try {
+    return window.sessionStorage.getItem(reloadKey) === currentBuild().buildId;
+  } catch {
+    // Confirmation is optional when the browser denies sessionStorage access.
+    return false;
+  }
+}
+
 function assertSafeToUpdate() {
   if (
     isUpdateBlocked() ||
@@ -24,7 +35,6 @@ export async function activateUpdate(worker: ServiceWorker) {
       throw new Error(
         'Обновление ещё не загружено полностью. Повторите проверку.',
       );
-    const reloadKey = 'masstracker:last-update-reload';
     if (window.sessionStorage.getItem(reloadKey) === target.version)
       throw new Error(
         'Повторная перезагрузка этой сборки остановлена. Закройте и снова откройте приложение.',

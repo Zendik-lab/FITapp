@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { Server } from 'node:http';
-import { resolve } from 'node:path';
+import { resolve, join, sep } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { createStaticServer } from '../../scripts/serve-web.cjs';
 
 let server: Server;
@@ -292,4 +293,92 @@ test('каждый раздел профиля редактируется отд
   await expect(
     page.getByText('До целевого веса: 0 кг', { exact: true }),
   ).toBeVisible();
+});
+
+test('заполненная анкета, цель и тема переживают два полных перезапуска браузера с офлайн-правками', async ({
+  browser,
+  browserName,
+}) => {
+  // WebKit on Windows needs a short path for its on-disk Cache API bodies.
+  const directory = mkdtempSync(join(resolve('.expo'), 'persistence-'));
+  const options = {
+    headless: true,
+    viewport: { width: 390, height: 844 },
+    channel:
+      browserName === 'chromium'
+        ? process.env.PLAYWRIGHT_CHROMIUM_CHANNEL
+        : undefined,
+  };
+  let persistent = await browser
+    .browserType()
+    .launchPersistentContext(directory, options);
+  try {
+    let page = persistent.pages()[0] ?? (await persistent.newPage());
+    await reachSummary(page);
+    await page
+      .getByRole('button', { name: 'Создать мой профиль', exact: true })
+      .click();
+    await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+    await page.getByRole('button', { name: /^Моя цель,/ }).click();
+    await page.getByLabel('Целевой вес, кг', { exact: true }).fill('78');
+    await page
+      .getByRole('button', { name: 'Сохранить изменения', exact: true })
+      .click();
+    await page.getByRole('button', { name: /^Внешний вид,/ }).click();
+    await page.getByRole('radio', { name: 'Тёмная', exact: true }).click();
+    await expect(
+      page.getByRole('button', { name: 'Внешний вид, Тёмная', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText('Доступно без интернета', { exact: true }),
+    ).toBeVisible();
+    await persistent.close();
+    persistent = await browser
+      .browserType()
+      .launchPersistentContext(directory, { ...options, offline: true });
+    page = persistent.pages()[0] ?? (await persistent.newPage());
+    await page.goto(url + '/profile');
+    await expect(
+      page.getByRole('button', { name: /^Личная информация, Алекс/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Внешний вид, Тёмная', exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: /^Моя цель,/ }).click();
+    await expect(
+      page.getByLabel('Целевой вес, кг', { exact: true }),
+    ).toHaveValue('78');
+    await page.getByLabel('Целевой вес, кг', { exact: true }).fill('79');
+    await page
+      .getByRole('button', { name: 'Сохранить изменения', exact: true })
+      .click();
+    await page.getByRole('button', { name: /^Личная информация,/ }).click();
+    await page.getByLabel('Имя', { exact: true }).fill('Офлайн Алекс');
+    await page
+      .getByRole('button', { name: 'Сохранить изменения', exact: true })
+      .click();
+    await expect(
+      page.getByRole('button', { name: /^Личная информация, Офлайн Алекс/ }),
+    ).toBeVisible();
+    await persistent.close();
+    persistent = await browser
+      .browserType()
+      .launchPersistentContext(directory, { ...options, offline: true });
+    page = persistent.pages()[0] ?? (await persistent.newPage());
+    await page.goto(url);
+    await expect(
+      page.getByText('Привет, Офлайн Алекс!', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText('70,5 кг', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+    await page.getByRole('button', { name: /^Моя цель,/ }).click();
+    await expect(
+      page.getByLabel('Целевой вес, кг', { exact: true }),
+    ).toHaveValue('79');
+  } finally {
+    await persistent.close();
+    if (!resolve(directory).startsWith(resolve('.expo') + sep))
+      throw new Error('Unsafe browser profile cleanup');
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

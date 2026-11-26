@@ -15,7 +15,7 @@ function listFiles(directory, prefix = '') {
     const path = `${prefix}${entry.name}`;
     if (entry.isDirectory())
       return listFiles(join(directory, entry.name), `${path}/`);
-    return /(?:^|\/)(?:sw.js|version.json|precache-manifest.json|metadata.json)$|\.map$/.test(
+    return /(?:^|\/)(?:sw.js|version.json|precache-manifest.json|metadata.json|404.html)$|\.map$/.test(
       path,
     )
       ? []

@@ -1,6 +1,6 @@
 const { createServer } = require('node:http');
 const { readFile } = require('node:fs/promises');
-const { readFileSync } = require('node:fs');
+const { readFileSync, existsSync } = require('node:fs');
 const { resolve, extname, sep } = require('node:path');
 
 const types = {
@@ -22,6 +22,18 @@ const types = {
  */
 function createStaticServer(directory, intercept = () => false) {
   const root = resolve(directory);
+  const custom404 = existsSync(resolve(root, '404.html'));
+  const redirects = resolve(root, '_redirects');
+  const rewrites = new Map(
+    (existsSync(redirects) ? readFileSync(redirects, 'utf8') : '')
+      .split(/\r?\n/)
+      .map((line) => line.trim().split(/\s+/))
+      .filter(
+        ([source, target, status]) =>
+          source.startsWith('/') && target?.startsWith('/') && status === '200',
+      )
+      .map(([source, target]) => [source, target]),
+  );
   // Mirror Pages' ordered _headers rules, including detach before override.
   // This lets browser tests verify actual response headers of the export.
   const rules = [];
@@ -46,7 +58,7 @@ function createStaticServer(directory, intercept = () => false) {
       );
       const file = resolve(
         root,
-        `.${pathname === '/' ? '/index.html' : pathname}`,
+        `.${rewrites.get(pathname) ?? (pathname === '/' ? '/index.html' : pathname)}`,
       );
       if (!file.startsWith(root + sep)) {
         response.writeHead(403).end();
@@ -57,8 +69,14 @@ function createStaticServer(directory, intercept = () => false) {
       try {
         body = await readFile(file);
       } catch {
-        if (extension) {
-          response.writeHead(404).end();
+        if (custom404 || extension) {
+          response
+            .writeHead(404, { 'content-type': 'text/html; charset=utf-8' })
+            .end(
+              custom404
+                ? await readFile(resolve(root, '404.html'))
+                : 'Not found',
+            );
           return;
         }
         body = await readFile(resolve(root, 'index.html'));

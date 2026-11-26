@@ -15,7 +15,7 @@ import { Card } from '@/components/card';
 import { SectionHeader } from '@/components/headers';
 import { useAppTheme } from '@/theme';
 
-import { activateUpdate } from './web-update';
+import { activateUpdate, wasUpdateInstalled } from './web-update';
 import { currentBuild } from './build-info';
 import {
   blockUpdates,
@@ -269,6 +269,7 @@ const checkLabels: Record<UpdateCheck['state'], string> = {
 export function AppVersionSection() {
   const pwa = use(PwaContext);
   const info = currentBuild();
+  const [installed] = useState(wasUpdateInstalled);
   return (
     <Card>
       <SectionHeader title="Версия приложения" />
@@ -277,6 +278,11 @@ export function AppVersionSection() {
         Сборка{' '}
         {info.buildId === 'development' ? 'для разработки' : info.buildId}
       </AppText>
+      {installed && (
+        <AppText variant="caption" tone="muted" accessibilityRole="status">
+          Обновление успешно установлено.
+        </AppText>
+      )}
       <PrimaryButton
         label="Проверить обновления"
         secondary

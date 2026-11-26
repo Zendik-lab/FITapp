@@ -9,6 +9,7 @@
   "scripts": {
     "start": "expo start --go",
     "build:web": "node scripts/build-web.cjs",
+    "verify:web": "node scripts/verify-web.cjs",
     "serve:web": "node scripts/serve-web.cjs",
     "test:offline": "playwright test",
     "lint": "eslint . --max-warnings 0",

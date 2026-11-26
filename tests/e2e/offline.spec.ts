@@ -139,6 +139,23 @@ const test = base.extend<{ site: Site }>({
   },
 });
 
+test('первая подготовка завершает загрузку и подтверждает актуальную версию', async ({
+  page,
+  site,
+}) => {
+  site.holdResource = '/app-shell.css';
+  await page.goto(`${site.url}/profile`);
+  await expect(
+    page.getByText('Загружаем обновление…', { exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => site.heldRequests).toBeGreaterThan(0);
+  site.releaseResource();
+  await ready(page);
+  await expect(
+    page.getByText('Установлена актуальная версия.', { exact: true }),
+  ).toBeVisible();
+});
+
 test('проверяет HTML по сети, предлагает новую сборку и позволяет отложить обновление', async ({
   page,
   site,
@@ -180,6 +197,14 @@ test('проверяет HTML по сети, предлагает новую с�
   await expect(
     page.getByText(`Сборка ${version}`, { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByText('Обновление успешно установлено.', { exact: true }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: test.info().outputPath('updated-profile-desktop.png'),
+    fullPage: true,
+  });
 });
 
 test('после офлайн-правок и восстановления сети обновляет профиль и цели без потери данных и повторных reload', async ({

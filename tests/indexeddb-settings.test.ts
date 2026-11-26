@@ -74,3 +74,62 @@ test('откатывает всю запись при превышении кв�
     quota.mockRestore();
   }
 });
+
+test('ошибка миграции сохраняет исходную версию базы и все старые записи', async () => {
+  const factory = new IDBFactory();
+  await new Promise<void>((resolve, reject) => {
+    const request = factory.open('masstracker', 1);
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('app_settings', {
+        keyPath: 'key',
+      });
+      store.put({ key: 'theme_mode', value: 'dark', updatedAt: 'old' });
+      // Simulate a collision in a migration, not a fresh empty database.
+      store.put({
+        key: 'user_state_schema',
+        value: 'legacy',
+        updatedAt: 'old',
+      });
+      store.put({
+        key: 'user_state',
+        value: 'original-profile',
+        updatedAt: 'old',
+      });
+    };
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+  });
+  await expect(openIndexedDbSettings(factory)).rejects.toMatchObject({
+    code: 'unavailable',
+  });
+  const retained = await new Promise<{ version: number; records: unknown[] }>(
+    (resolve, reject) => {
+      const request = factory.open('masstracker', 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const read = database
+          .transaction('app_settings')
+          .objectStore('app_settings')
+          .getAll();
+        read.onerror = () => reject(read.error);
+        read.onsuccess = () => {
+          resolve({ version: database.version, records: read.result });
+          database.close();
+        };
+      };
+    },
+  );
+  expect(retained.version).toBe(1);
+  expect(retained.records).toEqual(
+    expect.arrayContaining([
+      { key: 'theme_mode', value: 'dark', updatedAt: 'old' },
+      { key: 'user_state_schema', value: 'legacy', updatedAt: 'old' },
+      { key: 'user_state', value: 'original-profile', updatedAt: 'old' },
+    ]),
+  );
+  expect(retained.records).toHaveLength(3);
+});
