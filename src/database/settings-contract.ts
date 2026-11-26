@@ -4,8 +4,17 @@ export type SettingChange = { key: string; value: string | null };
 export interface SettingsStorage {
   get(key: string): Promise<string | null>;
   list(): Promise<Setting[]>;
-  /** Applies every change in order, committing the batch atomically. */
-  apply(changes: readonly SettingChange[]): Promise<void>;
+  /** Checks the optional expected value and commits all changes in one transaction. */
+  apply(
+    changes: readonly SettingChange[],
+    expected?: SettingChange,
+  ): Promise<void>;
+}
+
+export class SettingsConflictError extends Error {
+  constructor() {
+    super('Данные изменены в другом окне. Загрузите актуальные значения.');
+  }
 }
 
 export class SettingsStorageError extends Error {

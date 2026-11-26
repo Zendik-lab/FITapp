@@ -1,6 +1,9 @@
 import { getDatabase } from './client';
 import { createSettingsRepository } from './repositories/settings';
-import type { SettingsStorage } from './settings-contract';
+import {
+  SettingsConflictError,
+  type SettingsStorage,
+} from './settings-contract';
 import { trackSettingsWrite } from './settings-writes';
 
 export async function getSettingsStorage(): Promise<SettingsStorage> {
@@ -13,18 +16,20 @@ export async function getSettingsStorage(): Promise<SettingsStorage> {
       database.getAllAsync(
         'SELECT key, value, updated_at AS updatedAt FROM app_settings ORDER BY key',
       ),
-    apply: (changes) =>
+    apply: (changes, expected) =>
       trackSettingsWrite(async () => {
-        if (changes.length === 1) {
+        if (changes.length === 1 && !expected) {
           const { key, value } = changes[0];
           return value === null
             ? repository.remove(key)
             : repository.set(key, value);
         }
-        if (changes.length === 0) return;
+        if (changes.length === 0 && !expected) return;
 
         await database.withExclusiveTransactionAsync(async (transaction) => {
           const batch = createSettingsRepository(transaction);
+          if (expected && (await batch.get(expected.key)) !== expected.value)
+            throw new SettingsConflictError();
           for (const { key, value } of changes) {
             if (value === null) await batch.remove(key);
             else await batch.set(key, value);

@@ -63,8 +63,12 @@ test('переносит выбранную дату между разделам
     await screen.findByRole('button', { name: 'Предыдущая неделя' }),
   );
   await fireEvent.press(screen.getByLabelText('Питание'));
-  expect(await screen.findByText('Завтрак')).toBeTruthy();
-  expect(screen.getByText('Записей нет')).toBeTruthy();
+  expect(
+    await screen.findByText(
+      'Записей нет. Дневник питания появится на этапе 04.',
+    ),
+  ).toBeTruthy();
+  expect(screen.queryByText('Завтрак')).toBeNull();
   await fireEvent.press(
     screen.getByRole('button', { name: 'Сканировать штрихкод' }),
   );

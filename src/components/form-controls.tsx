@@ -2,11 +2,13 @@ import {
   createContext,
   use,
   useCallback,
+  useState,
   type ReactNode,
   type RefObject,
 } from 'react';
 import {
   Pressable,
+  Platform,
   StyleSheet,
   TextInput,
   View,
@@ -40,8 +42,12 @@ export function FormField({
   const { colors } = useAppTheme();
   const fields = use(FieldFocusContext);
   const disabled = use(FormDisabledContext);
+  const [ready, setReady] = useState(Platform.OS !== 'web');
   const registerField = useCallback(
     (input: TextInputInstance | null) => {
+      // The ref's commit update flushes RN Web's passive selection restore
+      // before the field becomes editable; subsequent typing never changes refs.
+      if (input && Platform.OS === 'web') setReady(true);
       if (!fields) return;
       if (input) fields.current.set(name, input);
       else fields.current.delete(name);
@@ -60,7 +66,7 @@ export function FormField({
         {label}
       </AppText>
       <TextInput
-        editable={!disabled}
+        editable={!disabled && ready}
         ref={registerField}
         inputMode={inputMode}
         keyboardType={

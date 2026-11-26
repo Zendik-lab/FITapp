@@ -62,6 +62,10 @@ for (const standalone of [false, true]) {
     const height = page.getByLabel('Рост, см', { exact: true });
     await height.focus();
     await page.keyboard.type('1');
+    await expect(height).toHaveValue('1');
+    expect(
+      await height.evaluate((node: HTMLInputElement) => node.selectionStart),
+    ).toBe(1);
     // Safari scrolls the form to keep the caret visible as the keyboard and
     // visual viewport change. Use a real scroll, without any touch/drag gesture.
     const scroll = await height.evaluate(async (input) => {
@@ -86,6 +90,9 @@ for (const standalone of [false, true]) {
     });
     expect(scroll).toBe(true);
     await expect(height).toBeFocused();
+    expect(
+      await height.evaluate((node: HTMLInputElement) => node.selectionStart),
+    ).toBe(1);
     await page.keyboard.type('80,5');
     await expect(height).toHaveValue('180,5');
     await expect(height).toBeFocused();
@@ -154,6 +161,7 @@ async function typeField(
   autosave = false,
 ) {
   const field = page.getByLabel(label, { exact: true });
+  await expect(field).toBeEditable();
   const original = await field.evaluateHandle((node) => node);
   if (inputMode !== 'text') {
     await expect(field).toHaveAttribute('inputmode', inputMode);
@@ -451,7 +459,7 @@ test('анкета, восстановление, редактирование, 
     page.getByText('Привет, Александр!', { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText('Пока не рассчитаны.', { exact: false }),
+    page.getByRole('button', { name: 'Калории и БЖУ', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('70,5 кг', { exact: true })).toBeVisible();
   await page.screenshot({

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
@@ -16,12 +17,28 @@ import { spacing } from '@/theme';
 
 import { CalorieCard } from './calorie-card';
 import { demoLabel, getDemoDay } from './demo-data';
+import { useProfile } from '@/features/profile/profile-context';
+import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
+import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
 
 export function NutritionScreen() {
+  const profile = useProfile()?.state.profile;
+  const [calculator, setCalculator] = useState(false);
+  const [updated, setUpdated] = useState(false);
   const { today, selectedDate, selectDate } = useSelectedDate();
   const showComingSoon = useComingSoon();
   const isToday = sameDay(today, selectedDate);
   const day = getDemoDay(isToday);
+
+  if (calculator)
+    return (
+      <CalculatorScreen
+        onClose={(saved) => {
+          setCalculator(false);
+          setUpdated(saved);
+        }}
+      />
+    );
 
   return (
     <ScreenContainer>
@@ -43,33 +60,57 @@ export function NutritionScreen() {
         }
       />
       <DateSelector date={selectedDate} today={today} onChange={selectDate} />
-      <View style={styles.group}>
-        <AppText variant="caption" tone="muted">
-          {demoLabel}
+      {updated && (
+        <AppText tone="accentText" accessibilityLiveRegion="polite">
+          Цели питания сохранены.
         </AppText>
-        <CalorieCard day={day} />
+      )}
+      <View style={styles.group}>
+        {profile ? (
+          <NutritionSummary
+            onOpen={() => {
+              setUpdated(false);
+              setCalculator(true);
+            }}
+          />
+        ) : (
+          <>
+            <AppText variant="caption" tone="muted">
+              {demoLabel}
+            </AppText>
+            <CalorieCard day={day} />
+          </>
+        )}
       </View>
       <View style={styles.group}>
         <SectionHeader title="Дневник питания" />
-        {!isToday && <AppText tone="muted">Записей нет</AppText>}
-        {day.meals.map(({ title, calories, example, icon }) => (
-          <Card key={title} style={styles.meal}>
-            <AppIcon name={icon} size={19} />
-            <View style={styles.mealDetails}>
-              <AppText variant="action">{title}</AppText>
-              {example && (
-                <AppText variant="caption" tone="muted">
-                  {example} · {formatNumber(calories)} ккал
-                </AppText>
-              )}
-            </View>
-            <IconButton
-              label={`Добавить продукт, ${title.toLocaleLowerCase('ru')}`}
-              icon="Plus"
-              onPress={() => showComingSoon('Добавить продукт')}
-            />
-          </Card>
-        ))}
+        {profile ? (
+          <AppText tone="muted">
+            Записей нет. Дневник питания появится на этапе 04.
+          </AppText>
+        ) : (
+          <>
+            {!isToday && <AppText tone="muted">Записей нет</AppText>}
+            {day.meals.map(({ title, calories, example, icon }) => (
+              <Card key={title} style={styles.meal}>
+                <AppIcon name={icon} size={19} />
+                <View style={styles.mealDetails}>
+                  <AppText variant="action">{title}</AppText>
+                  {example && (
+                    <AppText variant="caption" tone="muted">
+                      {example} · {formatNumber(calories)} ккал
+                    </AppText>
+                  )}
+                </View>
+                <IconButton
+                  label={`Добавить продукт, ${title.toLocaleLowerCase('ru')}`}
+                  icon="Plus"
+                  onPress={() => showComingSoon('Добавить продукт')}
+                />
+              </Card>
+            ))}
+          </>
+        )}
       </View>
       <EmptyState
         title="Рецепты"

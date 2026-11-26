@@ -27,6 +27,8 @@ import { useProfile } from '@/features/profile/profile-context';
 import { ProfileSections } from '@/features/profile/profile-sections';
 import { ProfileEditor } from '@/features/profile/profile-editor';
 import type { ProfileSection } from '@/features/profile/model';
+import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
+import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 
 const themeOptions = [
   'system',
@@ -74,7 +76,19 @@ export function ProfileScreen() {
   const session = useProfile();
   const [editing, setEditing] = useState<ProfileSection>();
   const [updated, setUpdated] = useState(false);
+  const [calculator, setCalculator] = useState(false);
+  const [nutritionUpdated, setNutritionUpdated] = useState(false);
   if (!appSettings) throw new Error('Не подключён AppSettingsProvider.');
+
+  if (calculator)
+    return (
+      <CalculatorScreen
+        onClose={(saved) => {
+          setCalculator(false);
+          setNutritionUpdated(saved);
+        }}
+      />
+    );
 
   if (editing && session?.state.profile)
     return (
@@ -102,6 +116,19 @@ export function ProfileScreen() {
           setEditing(section);
         }}
       />
+      {nutritionUpdated && (
+        <AppText tone="accentText" accessibilityLiveRegion="polite">
+          Цели питания сохранены.
+        </AppText>
+      )}
+      {session?.state.profile && (
+        <NutritionSummary
+          onOpen={() => {
+            setNutritionUpdated(false);
+            setCalculator(true);
+          }}
+        />
+      )}
       {appSettings.storageRecovery && (
         <Card>
           <SectionHeader title="Локальное хранилище" />

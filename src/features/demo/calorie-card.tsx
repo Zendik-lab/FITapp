@@ -9,13 +9,13 @@ import {
 import { formatNumber } from '@/features/calendar/calendar';
 import { radii, spacing, useAppTheme } from '@/theme';
 
-import type { DemoDay } from './demo-data';
+import type { DailyNutrition } from '@/features/nutrition/daily-totals';
 
 export function CalorieCard({
   day,
   dominant = false,
 }: {
-  day: DemoDay;
+  day: DailyNutrition;
   dominant?: boolean;
 }) {
   const { colors } = useAppTheme();

@@ -1,10 +1,17 @@
 /** @jest-environment node */
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import { migrateDatabase } from '@/database/migrations';
 import { getSettingsStorage } from '@/database/settings-storage';
 import { createProfileRepository } from '@/database/repositories/profile';
 import { initialMigration } from '@/database/migrations/001-initial';
 import { sampleDraft } from './fixtures/profile';
+import { createNutritionRepository } from '@/database/repositories/nutrition';
+import {
+  defaultPreferences,
+  resolveNutrition,
+} from '@/features/nutrition/model';
+import { toProfile } from '@/features/profile/validation';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
@@ -51,6 +58,13 @@ const mockDatabase = {
       throw error;
     }
   },
+  withExclusiveTransactionAsync: async (
+    operation: (
+      transaction: Pick<SQLiteDatabase, 'getFirstAsync' | 'runAsync'>,
+    ) => Promise<void>,
+  ): Promise<void> => {
+    await mockDatabase.withTransactionAsync(() => operation(mockDatabase));
+  },
 };
 jest.mock('@/database/client', () => ({
   getDatabase: async () => mockDatabase,
@@ -96,6 +110,13 @@ test('файловый SQLite восстанавливает профиль, а�
       name: 'На диске',
       targetWeight: '79',
     });
+    const nutrition = resolveNutrition(toProfile(sampleDraft), {
+      ...defaultPreferences(),
+      calorieMode: 'manual',
+      manualCalories: 3100,
+    }).snapshot;
+    if (!nutrition) throw new Error('Missing test nutrition targets');
+    await createNutritionRepository(storage).save(nutrition);
     sql.close();
     sql = new DatabaseSync(file);
     await migrateDatabase(mockDatabase);
@@ -105,6 +126,7 @@ test('файловый SQLite восстанавливает профиль, а�
     expect(state.profile?.personal.name).toBe('На диске');
     expect(state.profile?.goals.targetWeightKg).toBe(79);
     expect(await reopened.get('theme_mode')).toBe('dark');
+    expect(await createNutritionRepository(reopened).load()).toEqual(nutrition);
   } finally {
     sql.close();
     sql = new DatabaseSync(':memory:');
@@ -112,4 +134,26 @@ test('файловый SQLite восстанавливает профиль, а�
       throw new Error('Unsafe SQLite test cleanup');
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('SQLite атомарно отклоняет устаревшую цель и сохраняет ручную настройку', async () => {
+  await migrateDatabase(mockDatabase);
+  const storage = await getSettingsStorage();
+  const original = resolveNutrition(
+    toProfile(sampleDraft),
+    defaultPreferences(),
+  ).snapshot!;
+  const first = createNutritionRepository(storage);
+  await first.save(original);
+  const second = createNutritionRepository(await getSettingsStorage());
+  const previous = await second.load();
+  const manual = resolveNutrition(toProfile(sampleDraft), {
+    ...defaultPreferences(),
+    calorieMode: 'manual',
+    manualCalories: 3000,
+  }).snapshot!;
+  await first.save(manual);
+  await expect(second.save(original, previous)).rejects.toThrow(/изменены/);
+  expect((await second.load())?.targets.calories).toBe(3000);
+  expect((await second.load())?.preferences.calorieMode).toBe('manual');
 });

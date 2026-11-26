@@ -11,6 +11,7 @@ import { tabFeedback } from '@/features/pwa/tab-feedback';
 import { StartupGate } from '@/features/startup/startup-gate';
 import { ProfileProvider } from '@/features/profile/profile-provider';
 import { OnboardingGate } from '@/features/profile/onboarding-screen';
+import { NutritionProvider } from '@/features/nutrition/nutrition-provider';
 import { radii, touchSize, typography, useAppTheme } from '@/theme';
 import { NavigationAppearance } from '@/theme/navigation-appearance';
 
@@ -31,7 +32,9 @@ export default function TabLayout() {
             <PwaProvider>
               <ProfileProvider>
                 <OnboardingGate>
-                  <AppTabs />
+                  <NutritionProvider>
+                    <AppTabs />
+                  </NutritionProvider>
                 </OnboardingGate>
               </ProfileProvider>
             </PwaProvider>

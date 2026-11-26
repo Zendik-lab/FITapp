@@ -1,5 +1,6 @@
 import {
   SettingsStorageError,
+  SettingsConflictError,
   type Setting,
   type SettingsStorage,
 } from './settings-contract';
@@ -38,6 +39,7 @@ export function getSettingsStorage(): Promise<SettingsStorage> {
 }
 
 function storageError(error: unknown, fallback: 'unavailable' | 'operation') {
+  if (error instanceof SettingsConflictError) return error;
   const name =
     typeof error === 'object' && error !== null && 'name' in error
       ? error.name
@@ -174,9 +176,16 @@ function createStorage(database: IDBDatabase): SettingsStorage {
     },
     list: () =>
       run<Setting[]>('readonly', (store) => requestResult(store.getAll())),
-    apply: (changes) =>
+    apply: (changes, expected) =>
       trackSettingsWrite(() =>
         run('readwrite', async (store) => {
+          if (expected) {
+            const current = await requestResult<Setting | undefined>(
+              store.get(expected.key),
+            );
+            if ((current?.value ?? null) !== expected.value)
+              throw new SettingsConflictError();
+          }
           const updatedAt = new Date().toISOString();
           // Queue the whole batch before yielding. Safari may auto-commit an idle transaction.
           const requests: Promise<unknown>[] = [];

@@ -1,4 +1,7 @@
-import type { SettingsStorage } from '@/database/settings-contract';
+import {
+  SettingsConflictError,
+  type SettingsStorage,
+} from '@/database/settings-contract';
 import { createProfileRepository } from '@/database/repositories/profile';
 import { emptyDraft, type ProfileDraft } from '@/features/profile/model';
 
@@ -25,7 +28,9 @@ export async function memoryStorage(
     get: async (key) => values.get(key) ?? null,
     list: async () =>
       [...values].map(([key, value]) => ({ key, value, updatedAt: 'test' })),
-    apply: async (changes) => {
+    apply: async (changes, expected) => {
+      if (expected && (values.get(expected.key) ?? null) !== expected.value)
+        throw new SettingsConflictError();
       for (const { key, value } of changes) {
         if (value === null) values.delete(key);
         else values.set(key, value);

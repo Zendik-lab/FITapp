@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/components/app-text';
@@ -23,6 +24,8 @@ import { CalorieCard } from './calorie-card';
 import { demoLabel, demoTraining, demoWeight, getDemoDay } from './demo-data';
 import { useProfile } from '@/features/profile/profile-context';
 import { goalLabels } from '@/features/profile/options';
+import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
+import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
 
 const quickActions: readonly { label: string; icon: AppIconName }[] = [
   { label: 'Добавить еду', icon: 'Utensils' },
@@ -32,6 +35,7 @@ const quickActions: readonly { label: string; icon: AppIconName }[] = [
 ];
 
 export function TodayScreen() {
+  const [calculator, setCalculator] = useState(false);
   const profile = useProfile()?.state.profile;
   const { colors } = useAppTheme();
   const { fontScale, width } = useWindowDimensions();
@@ -39,6 +43,9 @@ export function TodayScreen() {
   const showComingSoon = useComingSoon();
   const isToday = sameDay(today, selectedDate);
   const day = getDemoDay(isToday);
+
+  if (calculator)
+    return <CalculatorScreen onClose={() => setCalculator(false)} />;
 
   return (
     <ScreenContainer>
@@ -58,13 +65,7 @@ export function TodayScreen() {
       <DateSelector date={selectedDate} today={today} onChange={selectDate} />
       <View style={styles.group}>
         {profile ? (
-          <Card>
-            <SectionHeader title="Калории и БЖУ" />
-            <AppText tone="muted">
-              Пока не рассчитаны. Персональные расчёты появятся на следующем
-              этапе.
-            </AppText>
-          </Card>
+          <NutritionSummary dominant onOpen={() => setCalculator(true)} />
         ) : (
           <>
             <AppText variant="caption" tone="muted">
