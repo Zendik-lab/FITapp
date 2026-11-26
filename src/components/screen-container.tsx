@@ -1,18 +1,15 @@
 import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PwaNotices } from '@/features/pwa/pwa-status';
 import { spacing, useAppTheme } from '@/theme';
+import { ScreenSafeArea } from './screen-safe-area';
 
 export function ScreenContainer({ children }: { children: ReactNode }) {
-  const { colors, isDark } = useAppTheme();
+  const { isDark } = useAppTheme();
   const { width } = useWindowDimensions();
   return (
-    <SafeAreaView
-      edges={['top', 'left', 'right']}
-      style={[styles.screen, { backgroundColor: colors.background }]}
-    >
+    <ScreenSafeArea>
       <ScrollView
         indicatorStyle={isDark ? 'white' : 'black'}
         contentInsetAdjustmentBehavior="never"
@@ -21,12 +18,11 @@ export function ScreenContainer({ children }: { children: ReactNode }) {
         <PwaNotices />
         {children}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenSafeArea>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
   content: {
     alignSelf: 'center',
     width: '100%',

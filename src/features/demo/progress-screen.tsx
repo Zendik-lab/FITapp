@@ -76,6 +76,7 @@ export function ProgressScreen() {
                   key={option.days}
                   accessibilityRole="tab"
                   accessibilityState={{ selected }}
+                  aria-selected={selected}
                   onPress={() => setPeriod(option)}
                   style={({ pressed }) => [
                     styles.period,

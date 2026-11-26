@@ -119,6 +119,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     root.style.colorScheme = isDark ? 'dark' : 'light';
     root.style.setProperty('--app-background', colors.background);
     root.style.setProperty('--focus-ring', colors.accentText);
+    root.style.setProperty('--scrollbar-thumb', colors.muted);
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', colors.background);

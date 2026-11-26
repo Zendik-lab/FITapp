@@ -59,6 +59,7 @@ export function ProfileEditor({
   return (
     <FieldFocusContext value={fields}>
       <FormScreen
+        withinTabs
         transitionKey={section}
         scrollRef={scroll}
         disabled={saving}

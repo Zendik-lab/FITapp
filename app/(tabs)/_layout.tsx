@@ -1,8 +1,8 @@
 import { Tabs } from 'expo-router';
 import { Platform, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ComingSoonProvider } from '@/components/coming-soon';
+import { AppTabBar } from '@/components/app-tab-bar';
 import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { sectionTitles } from '@/constants/sections';
 import { SelectedDateProvider } from '@/features/calendar/selected-date';
@@ -44,11 +44,11 @@ export default function TabLayout() {
 
 function AppTabs() {
   const { colors } = useAppTheme();
-  const { bottom } = useSafeAreaInsets();
   const web = Platform.OS === 'web';
 
   return (
     <Tabs
+      tabBar={(props) => <AppTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.background },
@@ -59,7 +59,7 @@ function AppTabs() {
           ? [typography.tab, styles.webLabel]
           : typography.tab,
         tabBarAllowFontScaling: false,
-        tabBarStyle: web ? [styles.webBar, { height: 56 + bottom }] : undefined,
+        tabBarStyle: web ? styles.webBar : undefined,
         tabBarItemStyle: styles.tab,
       }}
       screenListeners={({ navigation }) => ({
@@ -99,7 +99,7 @@ function AppTabs() {
 }
 
 const styles = StyleSheet.create({
-  webBar: { width: '100%', maxWidth: 640, alignSelf: 'center' },
+  webBar: { width: '100%', maxWidth: 640, alignSelf: 'center', height: 56 },
   webLabel: { lineHeight: 14 },
   tab: { minHeight: touchSize },
   icon: {

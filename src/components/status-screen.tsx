@@ -1,10 +1,10 @@
-import { ActivityIndicator, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 
 import { spacing, useAppTheme } from '@/theme';
 
 import { AppText } from './app-text';
 import { PrimaryButton } from './buttons';
+import { ScreenSafeArea } from './screen-safe-area';
 
 type StatusScreenProps = {
   title: string;
@@ -19,35 +19,39 @@ export function StatusScreen({
   loading,
   onRetry,
 }: StatusScreenProps) {
-  const { colors } = useAppTheme();
+  const { colors, isDark } = useAppTheme();
 
   return (
-    <SafeAreaView
-      style={[styles.screen, { backgroundColor: colors.background }]}
-    >
-      {loading && <ActivityIndicator color={colors.accent} />}
-      <AppText
-        variant="title"
-        accessibilityRole="header"
-        style={styles.centered}
+    <ScreenSafeArea bottomInset>
+      <ScrollView
+        contentContainerStyle={styles.screen}
+        contentInsetAdjustmentBehavior="never"
+        indicatorStyle={isDark ? 'white' : 'black'}
       >
-        {title}
-      </AppText>
-      {message && (
-        <AppText tone="muted" style={styles.centered}>
-          {message}
+        {loading && <ActivityIndicator color={colors.accent} />}
+        <AppText
+          variant="title"
+          accessibilityRole="header"
+          style={styles.centered}
+        >
+          {title}
         </AppText>
-      )}
-      {onRetry && (
-        <PrimaryButton label="Повторить" onPress={onRetry} secondary />
-      )}
-    </SafeAreaView>
+        {message && (
+          <AppText tone="muted" style={styles.centered}>
+            {message}
+          </AppText>
+        )}
+        {onRetry && (
+          <PrimaryButton label="Повторить" onPress={onRetry} secondary />
+        )}
+      </ScrollView>
+    </ScreenSafeArea>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.medium,

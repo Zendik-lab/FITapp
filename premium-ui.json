@@ -1,0 +1,30 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["src", "app", "public"],
+  "locale": "ru-KZ",
+  "canonicalMap": "DESIGN.md",
+  "requiredCapabilities": ["Date", "Form", "Scrollbar", "CRUD"],
+  "ownership": { "Date": "typed" },
+  "requiredCommands": [
+    "lint",
+    "types",
+    "unit",
+    "format",
+    "build",
+    "integrity",
+    "browser"
+  ],
+  "commands": {
+    "lint": "npm run lint",
+    "types": "npm run typecheck",
+    "unit": "npm run test",
+    "format": "npm run format:check",
+    "build": "npm run build:web",
+    "integrity": "npm run verify:web",
+    "browser": "npm run test:offline"
+  },
+  "evidence": {
+    "crudFullFlow": "tests/e2e/profile-flow.spec.ts",
+    "failurePaths": "tests/e2e/offline.spec.ts"
+  }
+}

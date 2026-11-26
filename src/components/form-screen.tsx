@@ -8,10 +8,10 @@ import {
   StyleSheet,
   type ScrollViewInstance,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { spacing, useAppTheme } from '@/theme';
 import { PwaNotices, useUpdateBlocker } from '@/features/pwa/pwa-status';
 import { FormDisabledContext } from './form-controls';
+import { ScreenSafeArea } from './screen-safe-area';
 
 export function FormScreen({
   children,
@@ -19,15 +19,17 @@ export function FormScreen({
   scrollRef,
   disabled = false,
   blockUpdate = false,
+  withinTabs = false,
 }: {
   children: ReactNode;
   transitionKey: string | number;
   scrollRef: RefObject<ScrollViewInstance | null>;
   disabled?: boolean;
   blockUpdate?: boolean;
+  withinTabs?: boolean;
 }) {
   useUpdateBlocker();
-  const { colors, isDark } = useAppTheme();
+  const { isDark } = useAppTheme();
   const [opacity] = useState(() => new Animated.Value(1));
   useEffect(() => {
     if (Platform.OS !== 'web' || !blockUpdate) return;
@@ -58,9 +60,7 @@ export function FormScreen({
     };
   }, [transitionKey, opacity, scrollRef]);
   return (
-    <SafeAreaView
-      style={[styles.screen, { backgroundColor: colors.background }]}
-    >
+    <ScreenSafeArea bottomInset={!withinTabs}>
       <KeyboardAvoidingView
         style={styles.screen}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -71,7 +71,7 @@ export function FormScreen({
           // React Native Web dismisses on every scroll event in on-drag mode,
           // including Safari's automatic scrolling to keep the caret visible.
           keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
-          automaticallyAdjustKeyboardInsets
+          contentInsetAdjustmentBehavior="never"
           indicatorStyle={isDark ? 'white' : 'black'}
           contentContainerStyle={styles.content}
         >
@@ -86,7 +86,7 @@ export function FormScreen({
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ScreenSafeArea>
   );
 }
 

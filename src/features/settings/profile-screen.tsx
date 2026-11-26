@@ -9,6 +9,7 @@ import { Dialog } from '@/components/dialog';
 import { AppHeader, SectionHeader } from '@/components/headers';
 import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { ScreenContainer } from '@/components/screen-container';
+import { RadioGroup } from '@/components/radio-group';
 import { SettingsRow } from '@/components/settings-row';
 import { sectionTitles } from '@/constants/sections';
 import { SettingsStorageError } from '@/database/settings-contract';
@@ -215,7 +216,7 @@ function ThemeDialog({
         if (!saving.current) onDismiss();
       }}
     >
-      <View style={styles.options}>
+      <RadioGroup label={appearance}>
         {themeOptions.map((option) => {
           const selected = mode === option;
           return (
@@ -223,6 +224,9 @@ function ThemeDialog({
               key={option}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected, disabled: pending }}
+              aria-checked={selected}
+              aria-disabled={pending}
+              tabIndex={selected ? 0 : -1}
               disabled={pending}
               onPress={() => void select(option)}
               style={({ pressed }) => [
@@ -246,7 +250,7 @@ function ThemeDialog({
             </Pressable>
           );
         })}
-      </View>
+      </RadioGroup>
       {pending && <AppText tone="muted">Сохраняем тему…</AppText>}
       {failure && (
         <AppText tone="error" accessibilityRole="alert">
@@ -266,7 +270,6 @@ function ThemeDialog({
 const styles = StyleSheet.create({
   group: { gap: spacing.small },
   settings: { padding: 0, gap: 0, overflow: 'hidden' },
-  options: { gap: spacing.tight },
   option: {
     minHeight: touchSize,
     padding: spacing.compact,
