@@ -26,7 +26,7 @@ import {
 import {
   meals,
   unitLabels,
-  type FoodDiaryEntry,
+  type ProductDiaryEntry,
   type FoodProduct,
   type FoodUnit,
   type MealType,
@@ -44,7 +44,7 @@ export function ProductDetail({
   onEdit,
 }: {
   product: FoodProduct;
-  entry?: FoodDiaryEntry;
+  entry?: ProductDiaryEntry;
   date: string;
   meal: MealType;
   onBack(): void;

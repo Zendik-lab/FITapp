@@ -26,6 +26,14 @@ const labels = {
   fat: 'Жиры на 100 г',
   carbs: 'Углеводы на 100 г',
 };
+const conversionLabels = {
+  gramsPerMl: 'Плотность, г/мл (необязательно)',
+  pieceGrams: 'Вес штуки, г (необязательно)',
+  servingGrams: 'Вес порции, г (необязательно)',
+} as const;
+const conversionKeys = ['gramsPerMl', 'pieceGrams', 'servingGrams'] as const;
+const optionalDecimal = (text: string) =>
+  text.trim() ? parseDecimal(text) : undefined;
 export function ProductEditor({
   product,
   barcode = '',
@@ -47,6 +55,9 @@ export function ProductEditor({
     protein: product ? String(product.per100.protein) : '',
     fat: product ? String(product.per100.fat) : '',
     carbs: product ? String(product.per100.carbs) : '',
+    gramsPerMl: product?.gramsPerMl?.toString() ?? '',
+    pieceGrams: product?.pieceGrams?.toString() ?? '',
+    servingGrams: product?.servingGrams?.toString() ?? '',
   }));
   const [draft, setDraft] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -71,6 +82,9 @@ export function ProductEditor({
     isCustom: true,
     createdAt: product?.createdAt ?? now,
     updatedAt: now,
+    gramsPerMl: optionalDecimal(draft.gramsPerMl),
+    pieceGrams: optionalDecimal(draft.pieceGrams),
+    servingGrams: optionalDecimal(draft.servingGrams),
   };
   const dirty = JSON.stringify(initial) !== JSON.stringify(draft);
   function field(name: keyof typeof draft, text: string) {
@@ -85,6 +99,11 @@ export function ProductEditor({
     for (const key of nutrientKeys)
       if (!Number.isFinite(value.per100[key]) || value.per100[key] < 0)
         next[key] = 'Введите неотрицательное число, например 12,5.';
+    for (const key of conversionKeys) {
+      const amount = value[key];
+      if (amount !== undefined && (!Number.isFinite(amount) || amount <= 0))
+        next[key] = 'Введите положительное число или оставьте поле пустым.';
+    }
     setErrors(next);
     if (Object.keys(next).length) {
       fields.current.get(Object.keys(next)[0])?.focus();
@@ -142,6 +161,17 @@ export function ProductEditor({
           <AppText key={w} tone="muted">
             {w}
           </AppText>
+        ))}
+        {conversionKeys.map((key) => (
+          <FormField
+            key={key}
+            name={key}
+            label={conversionLabels[key]}
+            value={draft[key]}
+            inputMode="decimal"
+            error={errors[key]}
+            onChangeText={(v) => field(key, v)}
+          />
         ))}
         <ChoiceGroup
           label="Категория продукта"

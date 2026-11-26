@@ -13,12 +13,25 @@ import { PwaNotices, useUpdateBlocker } from '@/features/pwa/pwa-status';
 import { FormDisabledContext } from './form-controls';
 import { ScreenSafeArea } from './screen-safe-area';
 
+export function useBeforeUnload(enabled: boolean) {
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !enabled) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [enabled]);
+}
+
 export function FormScreen({
   children,
   transitionKey,
   scrollRef,
   disabled = false,
   blockUpdate = false,
+  readOnly = false,
   withinTabs = false,
 }: {
   children: ReactNode;
@@ -26,20 +39,13 @@ export function FormScreen({
   scrollRef: RefObject<ScrollViewInstance | null>;
   disabled?: boolean;
   blockUpdate?: boolean;
+  readOnly?: boolean;
   withinTabs?: boolean;
 }) {
-  useUpdateBlocker();
+  useUpdateBlocker(!readOnly || blockUpdate);
   const { isDark } = useAppTheme();
   const [opacity] = useState(() => new Animated.Value(1));
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !blockUpdate) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, [blockUpdate]);
+  useBeforeUnload(blockUpdate);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
     let active = true;

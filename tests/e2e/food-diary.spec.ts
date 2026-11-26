@@ -428,3 +428,149 @@ for (const leave of ['close', 'hidden'] as const) {
       .toBe('yes');
   });
 }
+
+test('рецепт коктейля: свой продукт, клавиатура, масштаб, избранное и неизменная запись', async ({
+  page,
+  context,
+}) => {
+  await seed(page);
+  await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+  await expect(
+    page.getByText('Доступно без интернета', { exact: true }),
+  ).toBeVisible();
+  await context.setOffline(true);
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  const heading = (name: string) =>
+    visible(page, page.getByRole('heading', { name, exact: true }));
+  const field = (label: string) =>
+    visible(page, page.getByLabel(label, { exact: true }));
+  const radio = (name: string) =>
+    visible(page, page.getByRole('radio', { name, exact: true }));
+  const name = 'Коктейль для набора массы';
+  await button(page, 'Мои рецепты').click();
+  await expect(
+    page.getByText('Рецептов пока нет', { exact: true }),
+  ).toBeVisible();
+  await button(page, 'Создать рецепт').click();
+  await button(page, 'Сохранить рецепт').click();
+  await expect(field('Название блюда')).toBeFocused();
+  await field('Название блюда').fill(name);
+  await typeStable(page, 'Количество порций', '2');
+  await typeStable(page, 'Вес готового блюда, г (необязательно)', '1000');
+  await button(page, 'Категория: Основные блюда').click();
+  await radio('Протеиновые коктейли').click();
+  await button(page, 'Добавить ингредиент').click();
+  await button(page, 'Создать продукт').click();
+  for (const [label, value] of [
+    ['Название продукта', 'Молоко для теста'],
+    ['Калории на 100 г', '50'],
+    ['Белки на 100 г', '3'],
+    ['Жиры на 100 г', '2'],
+    ['Углеводы на 100 г', '5'],
+    ['Плотность, г/мл (необязательно)', '1,03'],
+  ])
+    await field(label).fill(value);
+  await button(page, 'Сохранить продукт').click();
+  await expect(heading('Новый рецепт')).toBeVisible();
+  await button(page, 'Единица: г').click();
+  await radio('мл').click();
+  await typeStable(page, 'Количество: Молоко для теста, мл', '700');
+  for (const [query, product, quantity] of [
+    ['банан', 'Банан', '120'],
+    ['овсяные хлопья', 'Овсяные хлопья сухие', '80'],
+    ['гейнер', 'Гейнер (пример этикетки)', '100'],
+  ]) {
+    await button(page, 'Добавить ингредиент').click();
+    await field('Название или штрихкод продукта').fill(query);
+    await button(page, `Выбрать: ${product}`).click();
+    await typeStable(page, `Количество: ${product}, г`, quantity);
+  }
+  await field('Инструкция (необязательно)').fill('Смешать в блендере.');
+  await radio('Весь рецепт').click();
+  await expect(page.getByText(/^1\D150,5 ккал/)).toBeVisible();
+  await button(page, 'Назад').click();
+  const discard = page.getByRole('dialog', { name: 'Выйти без сохранения?' });
+  await expect(discard).toBeVisible();
+  await discard
+    .getByRole('button', { name: 'Продолжить редактирование' })
+    .click();
+  await button(page, 'Сохранить рецепт').click();
+  await expect(heading(name)).toBeVisible();
+  await typeStable(page, 'Приготовить порций', '4');
+  await expect(page.getByText(/^Выход блюда · 4 порц/)).toBeVisible();
+  await expect(page.getByText('1 400 мл', { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(await page.evaluate(() => window.innerWidth));
+  await expect(
+    page.getByRole('tab', { name: 'Питание', exact: true }),
+  ).toBeVisible();
+  await button(page, 'В избранное').click();
+  await expect(button(page, 'Убрать из избранного')).toBeEnabled();
+  await button(page, 'Назад').click();
+  await radio('Избранные рецепты').click();
+  await field('Поиск по названию рецепта').fill('другой рецепт');
+  await expect(
+    page.getByText('Рецепты по этому запросу не найдены.'),
+  ).toBeVisible();
+  await button(page, 'Очистить поиск').click();
+  await expect(field('Поиск по названию рецепта')).toBeFocused();
+  await button(page, `Добавить в дневник: ${name}`).click();
+  await typeStable(page, 'Съедено порций', '0,5');
+  await radio('Обед').click();
+  await button(page, 'Добавить в дневник').click();
+  await expect(
+    page.getByText('Блюдо добавлено в дневник.', { exact: true }),
+  ).toBeVisible();
+  const first = (await state(page)).entries;
+  expect(first).toHaveLength(1);
+  expect(first[0]).toMatchObject({
+    meal: 'lunch',
+    amount: 0.5,
+    grams: 250,
+    product: { name },
+  });
+  await page.getByRole('tab', { name: 'Сегодня', exact: true }).click();
+  await expect(button(page, `Открыть запись: ${name}`)).toBeVisible();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Добавить продукт, ужин').click();
+  await button(page, 'Выбрать рецепт').click();
+  await radio('Недавно использованные').click();
+  await button(page, `Добавить в дневник: ${name}`).click();
+  await radio('Граммы').click();
+  await typeStable(page, 'Вес съеденного блюда, г', '125,5');
+  await button(page, 'Добавить в дневник').click();
+  await expect(
+    page.getByText('Блюдо добавлено в дневник.', { exact: true }),
+  ).toBeVisible();
+  expect((await state(page)).entries[1]).toMatchObject({
+    meal: 'dinner',
+    grams: 125.5,
+  });
+  await page.reload();
+  await button(page, 'Мои рецепты').click();
+  await button(page, `Открыть: ${name}`).click();
+  await button(page, 'Редактировать рецепт').click();
+  await expect(field('Количество порций')).toHaveValue('2');
+  await field('Название блюда').fill('Коктейль после правки');
+  await button(page, 'Удалить ингредиент: Банан').click();
+  await button(page, 'Сохранить рецепт').click();
+  await button(page, 'Дублировать рецепт').click();
+  await button(page, 'Открыть: Коктейль после правки').click();
+  await button(page, 'Удалить рецепт').click();
+  const deleteDialog = page.getByRole('dialog', { name: 'Удалить рецепт?' });
+  await expect(deleteDialog).toBeVisible();
+  await deleteDialog
+    .getByRole('button', { name: 'Подтвердить удаление рецепта' })
+    .click();
+  await expect(
+    button(page, 'Открыть: Коктейль после правки (копия)'),
+  ).toBeVisible();
+  await expect(button(page, 'Открыть: Коктейль после правки')).toHaveCount(0);
+  await button(page, 'Назад').click();
+  expect((await state(page)).entries[0]).toEqual(first[0]);
+  await button(page, `Изменить запись: ${name}`).first().click();
+  await expect(
+    page.getByText('КБЖУ на момент записи', { exact: true }),
+  ).toBeVisible();
+});

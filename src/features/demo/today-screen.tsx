@@ -29,9 +29,10 @@ import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
 import { useFoodDiary } from '@/features/food/food-context';
 import { FoodFlow } from '@/features/food/food-flow';
 import { DiaryStatus } from '@/features/food/diary-status';
-import { dateKey, portion } from '@/features/food/domain';
+import { dateKey, entryNutrition, parseDateKey } from '@/features/food/domain';
 import { NutritionValues } from '@/features/food/nutrition-values';
 import type { FoodDiaryEntry } from '@/features/food/model';
+import { formatFoodQuantity } from '@/features/food/units';
 
 const quickActions: readonly { label: string; icon: AppIconName }[] = [
   { label: 'Добавить еду', icon: 'Utensils' },
@@ -44,6 +45,7 @@ export function TodayScreen() {
   const [calculator, setCalculator] = useState(false);
   const diary = useFoodDiary();
   const [food, setFood] = useState<{ entry?: FoodDiaryEntry } | null>(null);
+  const [foodNotice, setFoodNotice] = useState('');
   const profile = useProfile()?.state.profile;
   const { colors } = useAppTheme();
   const { fontScale, width } = useWindowDimensions();
@@ -60,6 +62,11 @@ export function TodayScreen() {
         date={dateKey(selectedDate)}
         entry={food.entry}
         onClose={() => setFood(null)}
+        onLogged={(message, date) => {
+          selectDate(parseDateKey(date));
+          setFoodNotice(message);
+          setFood(null);
+        }}
       />
     );
 
@@ -80,6 +87,9 @@ export function TodayScreen() {
       </View>
       <DateSelector date={selectedDate} today={today} onChange={selectDate} />
       {diary && <DiaryStatus />}
+      {!!foodNotice && (
+        <AppText accessibilityLiveRegion="polite">{foodNotice}</AppText>
+      )}
       <View style={styles.group}>
         {profile ? (
           <NutritionSummary dominant onOpen={() => setCalculator(true)} />
@@ -102,11 +112,12 @@ export function TodayScreen() {
             .map((entry) => (
               <Card key={entry.id}>
                 <AppText variant="action">
-                  {entry.product.name} · {formatNumber(entry.grams)} г
+                  {entry.product.name} ·{' '}
+                  {entry.recipe && entry.unit === 'serving'
+                    ? `${formatFoodQuantity(entry.amount)} порц.`
+                    : `${formatFoodQuantity(entry.grams ?? 0)} г`}
                 </AppText>
-                <NutritionValues
-                  values={portion(entry.product, entry.amount, entry.unit)}
-                />
+                <NutritionValues values={entryNutrition(entry)} />
                 <IconButton
                   icon="ChevronRight"
                   label={`Открыть запись: ${entry.product.name}`}

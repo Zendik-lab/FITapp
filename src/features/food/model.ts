@@ -1,4 +1,8 @@
 import type { NutritionTargets } from '@/features/nutrition/engine';
+import type { Recipe, RecipeNutritionSnapshot } from '@/features/recipes/model';
+import type { FoodUnit } from './units';
+
+export { unitLabels, type FoodUnit } from './units';
 
 export const meals = {
   breakfast: 'Завтрак',
@@ -7,13 +11,6 @@ export const meals = {
   snack: 'Перекусы',
 } as const;
 export type MealType = keyof typeof meals;
-export type FoodUnit = 'g' | 'ml' | 'piece' | 'serving';
-export const unitLabels: Record<FoodUnit, string> = {
-  g: 'г',
-  ml: 'мл',
-  piece: 'шт.',
-  serving: 'порция',
-};
 export const categories = [
   'Мясо и птица',
   'Рыба',
@@ -47,16 +44,26 @@ export interface FoodProduct {
   pieceGrams?: number;
   servingGrams?: number;
 }
-export interface FoodDiaryEntry {
+interface EntryBase {
   id: string;
   date: string;
   meal: MealType;
-  product: FoodProduct;
   amount: number;
-  unit: FoodUnit;
-  grams: number;
   createdAt: string;
 }
+export type ProductDiaryEntry = EntryBase & {
+  product: FoodProduct;
+  unit: FoodUnit;
+  grams: number;
+  recipe?: undefined;
+};
+export type RecipeDiaryEntry = EntryBase & {
+  product: Pick<FoodProduct, 'id' | 'name'>;
+  unit: 'g' | 'serving';
+  grams: number | null;
+  recipe: RecipeNutritionSnapshot;
+};
+export type FoodDiaryEntry = ProductDiaryEntry | RecipeDiaryEntry;
 export interface FavoriteFood {
   productId: string;
 }
@@ -70,6 +77,7 @@ export interface FoodState {
   entries: FoodDiaryEntry[];
   favorites: FavoriteFood[];
   recent: RecentFood[];
+  recipes: Recipe[];
 }
 export const emptyFoodState = (): FoodState => ({
   version: 1,
@@ -77,4 +85,5 @@ export const emptyFoodState = (): FoodState => ({
   entries: [],
   favorites: [],
   recent: [],
+  recipes: [],
 });

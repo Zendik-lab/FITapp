@@ -29,11 +29,13 @@ export function FoodSearch({
   onProduct,
   onCreate,
   onScan,
+  onRecipes,
 }: {
   onBack(): void;
   onProduct(product: FoodProduct): void;
   onCreate(): void;
   onScan(): void;
+  onRecipes?(): void;
 }) {
   const session = useFoodDiary();
   const latest = useRef(session);
@@ -118,6 +120,14 @@ export function FoodSearch({
     <FieldFocusContext value={fields}>
       <FoodForm title="Добавить продукт" onBack={onBack}>
         <View style={styles.actions}>
+          {onRecipes && (
+            <PrimaryButton
+              secondary
+              icon="BookOpen"
+              label="Выбрать рецепт"
+              onPress={onRecipes}
+            />
+          )}
           <PrimaryButton
             secondary
             icon="Barcode"

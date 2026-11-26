@@ -4,17 +4,95 @@ import {
   meals,
   type FoodProduct,
   type FoodState,
+  type RecipeDiaryEntry,
 } from '@/features/food/model';
 import {
   dateKey,
   gramsFor,
   parseDateKey,
   validateProduct,
+  validNutrition,
+  recipePortion,
 } from '@/features/food/domain';
+import { positive, validateRecipe } from '@/features/recipes/domain';
+import type { Recipe } from '@/features/recipes/model';
 
 const key = 'food_diary_state';
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+function positiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && positive(value);
+}
+function recipe(value: unknown): value is Recipe {
+  if (
+    !record(value) ||
+    typeof value.id !== 'string' ||
+    typeof value.name !== 'string' ||
+    typeof value.category !== 'string' ||
+    typeof value.isFavorite !== 'boolean' ||
+    typeof value.createdAt !== 'string' ||
+    typeof value.updatedAt !== 'string' ||
+    !Array.isArray(value.ingredients) ||
+    !positiveNumber(value.servings)
+  )
+    return false;
+  for (const field of ['description', 'instructions'])
+    if (value[field] !== undefined && typeof value[field] !== 'string')
+      return false;
+  for (const field of ['cookedWeightGrams', 'preparationTime'])
+    if (value[field] !== undefined && !positiveNumber(value[field]))
+      return false;
+  const ids = new Set<string>();
+  for (const i of value.ingredients) {
+    if (
+      !record(i) ||
+      typeof i.id !== 'string' ||
+      ids.has(i.id) ||
+      typeof i.productId !== 'string' ||
+      typeof i.productName !== 'string' ||
+      !positiveNumber(i.quantity) ||
+      !positiveNumber(i.gramsPerUnit) ||
+      !positiveNumber(i.normalizedQuantity) ||
+      i.quantity * i.gramsPerUnit !== i.normalizedQuantity ||
+      typeof i.unit !== 'string' ||
+      !['g', 'kg', 'ml', 'l', 'piece', 'serving'].includes(i.unit) ||
+      !validNutrition(i.nutritionSnapshot)
+    )
+      return false;
+    ids.add(i.id);
+  }
+  try {
+    validateRecipe(value as unknown as Recipe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function recipeEntry(e: Record<string, unknown>): boolean {
+  const snapshot = e.recipe;
+  if (
+    !record(e.product) ||
+    typeof e.product.id !== 'string' ||
+    typeof e.product.name !== 'string' ||
+    !e.product.name.trim() ||
+    !record(snapshot) ||
+    !validNutrition(snapshot.total) ||
+    !positiveNumber(snapshot.servings) ||
+    (snapshot.cookedWeightGrams !== undefined &&
+      !positiveNumber(snapshot.cookedWeightGrams)) ||
+    (e.unit !== 'g' && e.unit !== 'serving') ||
+    !positiveNumber(e.amount)
+  )
+    return false;
+  return (
+    recipePortion(
+      snapshot as unknown as RecipeDiaryEntry['recipe'],
+      e.amount,
+      e.unit,
+    ).grams === e.grams
+  );
 }
 function product(value: unknown): value is FoodProduct {
   if (!record(value) || !record(value.per100)) return false;
@@ -47,10 +125,16 @@ function valid(value: unknown): value is FoodState {
     !Array.isArray(value.products) ||
     !Array.isArray(value.entries) ||
     !Array.isArray(value.favorites) ||
-    !Array.isArray(value.recent)
+    !Array.isArray(value.recent) ||
+    !Array.isArray(value.recipes)
   )
     return false;
   if (!value.products.every(product)) return false;
+  if (
+    !value.recipes.every(recipe) ||
+    new Set(value.recipes.map((r) => r.id)).size !== value.recipes.length
+  )
+    return false;
   if (
     !value.entries.every((e) => {
       if (
@@ -58,16 +142,17 @@ function valid(value: unknown): value is FoodState {
         typeof e.id !== 'string' ||
         typeof e.date !== 'string' ||
         typeof e.meal !== 'string' ||
-        !(e.meal in meals) ||
-        !product(e.product) ||
+        !Object.hasOwn(meals, e.meal) ||
         typeof e.amount !== 'number' ||
         !['g', 'ml', 'piece', 'serving'].includes(String(e.unit)) ||
         typeof e.createdAt !== 'string'
       )
         return false;
       try {
+        if (dateKey(parseDateKey(e.date)) !== e.date) return false;
+        if (e.recipe !== undefined) return recipeEntry(e);
         return (
-          dateKey(parseDateKey(e.date)) === e.date &&
+          product(e.product) &&
           gramsFor(
             e.product,
             e.amount,
@@ -97,7 +182,11 @@ export function createFoodRepository(storage: SettingsStorage) {
     const raw = await storage.get(key);
     if (raw === null) return { raw, state: emptyFoodState() };
     try {
-      const state: unknown = JSON.parse(raw);
+      const decoded: unknown = JSON.parse(raw);
+      const state =
+        record(decoded) && decoded.recipes === undefined
+          ? { ...decoded, recipes: [] }
+          : decoded;
       if (!valid(state)) throw new Error('schema');
       return { raw, state };
     } catch (cause) {

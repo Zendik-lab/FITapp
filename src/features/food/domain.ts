@@ -5,9 +5,61 @@ import {
   type FoodProduct,
   type FoodUnit,
   type MealType,
+  type ProductDiaryEntry,
+  type RecipeDiaryEntry,
 } from './model';
+import type { RecipeNutritionSnapshot } from '@/features/recipes/model';
 
 export const nutrientKeys = ['calories', 'protein', 'fat', 'carbs'] as const;
+export const zeroNutrition: NutritionTargets = {
+  calories: 0,
+  protein: 0,
+  fat: 0,
+  carbs: 0,
+};
+export function validNutrition(value: unknown): value is NutritionTargets {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    nutrientKeys.every((key) => {
+      const amount = (value as Partial<NutritionTargets>)[key];
+      return (
+        typeof amount === 'number' && Number.isFinite(amount) && amount >= 0
+      );
+    })
+  );
+}
+function multiplyNutrition(
+  values: NutritionTargets,
+  factor: number,
+): NutritionTargets {
+  return {
+    calories: values.calories * factor,
+    protein: values.protein * factor,
+    fat: values.fat * factor,
+    carbs: values.carbs * factor,
+  };
+}
+export function scaleNutrition(
+  values: NutritionTargets,
+  factor: number,
+): NutritionTargets {
+  const result = multiplyNutrition(values, factor);
+  if (!validNutrition(result))
+    throw new Error('Значение КБЖУ выходит за пределы допустимого.');
+  return result;
+}
+export function addNutrition(
+  a: NutritionTargets,
+  b: NutritionTargets,
+): NutritionTargets {
+  return {
+    calories: a.calories + b.calories,
+    protein: a.protein + b.protein,
+    fat: a.fat + b.fat,
+    carbs: a.carbs + b.carbs,
+  };
+}
 export function parseDecimal(value: string): number {
   return /^\d+(?:[.,]\d+)?$/.test(value.trim())
     ? Number(value.trim().replace(',', '.'))
@@ -120,12 +172,7 @@ export function portion(
   unit: FoodUnit,
 ): NutritionTargets {
   const factor = gramsFor(food, amount, unit) / 100;
-  return {
-    calories: food.per100.calories * factor,
-    protein: food.per100.protein * factor,
-    fat: food.per100.fat * factor,
-    carbs: food.per100.carbs * factor,
-  };
+  return scaleNutrition(food.per100, factor);
 }
 export function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
@@ -136,21 +183,51 @@ export function makeEntry(
   unit: FoodUnit,
   meal: MealType,
   date: string,
-): FoodDiaryEntry {
+): ProductDiaryEntry {
   parseDateKey(date);
   if (!(meal in meals)) throw new Error('Выберите приём пищи.');
   if (validateProduct(product).errors.length)
     throw new Error('Проверьте продукт.');
+  const grams = gramsFor(product, amount, unit);
+  scaleNutrition(product.per100, grams / 100);
   return {
     id: newId(),
     product: { ...product, per100: { ...product.per100 } },
     amount,
     unit,
-    grams: gramsFor(product, amount, unit),
+    grams,
     meal,
     date,
     createdAt: new Date().toISOString(),
   };
+}
+export function recipePortion(
+  recipe: RecipeNutritionSnapshot,
+  amount: number,
+  unit: RecipeDiaryEntry['unit'],
+) {
+  const weight = recipe.cookedWeightGrams;
+  const denominator = unit === 'g' ? weight : recipe.servings;
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !denominator ||
+    !Number.isFinite(denominator) ||
+    denominator <= 0
+  )
+    throw new Error('Введите положительное количество в доступной единице.');
+  const factor = amount / denominator;
+  const grams =
+    unit === 'g' ? amount : weight === undefined ? null : weight * factor;
+  if (grams !== null && (!Number.isFinite(grams) || grams <= 0))
+    throw new Error('Проверьте вес блюда.');
+  return { grams, values: scaleNutrition(recipe.total, factor) };
+}
+export function entryNutrition(entry: FoodDiaryEntry) {
+  return entry.recipe
+    ? recipePortion(entry.recipe, entry.amount, entry.unit).values
+    : // Older versions could store portions with an overflowing result.
+      multiplyNutrition(entry.product.per100, entry.grams / 100);
 }
 export function sumEntries(
   entries: readonly FoodDiaryEntry[],
@@ -160,17 +237,16 @@ export function sumEntries(
   return entries
     .filter((e) => e.date === date && (!meal || e.meal === meal))
     .reduce(
-      (total, e) => {
-        const values = portion(e.product, e.amount, e.unit);
-        return {
-          calories: total.calories + values.calories,
-          protein: total.protein + values.protein,
-          fat: total.fat + values.fat,
-          carbs: total.carbs + values.carbs,
-        };
-      },
-      { calories: 0, protein: 0, fat: 0, carbs: 0 },
+      (total, e) => addNutrition(total, entryNutrition(e)),
+      zeroNutrition,
     );
+}
+export function checkDayNutrition(
+  entries: readonly FoodDiaryEntry[],
+  date: string,
+) {
+  if (!validNutrition(sumEntries(entries, date)))
+    throw new Error('Итоговое КБЖУ за день выходит за пределы допустимого.');
 }
 export function progress(consumed: number, goal: number) {
   return {

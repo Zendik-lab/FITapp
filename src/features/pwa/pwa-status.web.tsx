@@ -231,8 +231,10 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useUpdateBlocker() {
-  useLayoutEffect(blockUpdates, []);
+export function useUpdateBlocker(enabled = true) {
+  useLayoutEffect(() => {
+    if (enabled) return blockUpdates();
+  }, [enabled]);
 }
 
 /** Called only after ProfileProvider has restored and validated local state. */

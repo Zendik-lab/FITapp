@@ -38,7 +38,7 @@ async function seed(
   await page.evaluate(
     ({ draft, step }) =>
       new Promise<void>((done, reject) => {
-        const request = indexedDB.open('masstracker', 3);
+        const request = indexedDB.open('masstracker');
         request.onupgradeneeded = () =>
           request.result.createObjectStore('app_settings', { keyPath: 'key' });
         request.onerror = () => reject(request.error);
@@ -47,7 +47,6 @@ async function seed(
           const transaction = database.transaction('app_settings', 'readwrite');
           const store = transaction.objectStore('app_settings');
           for (const [key, value] of [
-            ['user_state_schema', '1'],
             [
               'user_state',
               JSON.stringify({

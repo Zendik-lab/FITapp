@@ -3,6 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { initialMigration } from './001-initial';
 import { userStateMigration } from './002-user-state';
 import { foodDiaryMigration } from './003-food-diary';
+import { recipesMigration } from './004-recipes';
 
 type Migration = {
   version: number;
@@ -19,6 +20,7 @@ const migrations: readonly Migration[] = [
   initialMigration,
   userStateMigration,
   foodDiaryMigration,
+  recipesMigration,
 ];
 
 export async function migrateDatabase(

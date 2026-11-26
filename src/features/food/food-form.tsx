@@ -12,6 +12,7 @@ export function FoodForm({
   onBack,
   dirty = false,
   pending = false,
+  readOnly = false,
   error,
 }: {
   title: string;
@@ -19,6 +20,7 @@ export function FoodForm({
   onBack(): void;
   dirty?: boolean;
   pending?: boolean;
+  readOnly?: boolean;
   error?: string;
 }) {
   const scroll = useRef<ScrollViewInstance>(null);
@@ -29,6 +31,7 @@ export function FoodForm({
       transitionKey={title}
       scrollRef={scroll}
       disabled={pending}
+      readOnly={readOnly}
       blockUpdate={dirty || pending}
     >
       <AppText variant="title" accessibilityRole="header">

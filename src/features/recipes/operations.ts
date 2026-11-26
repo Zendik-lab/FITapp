@@ -1,0 +1,167 @@
+import {
+  checkDayNutrition,
+  newId,
+  parseDateKey,
+  recipePortion,
+} from '@/features/food/domain';
+import {
+  meals,
+  type FoodState,
+  type MealType,
+  type RecipeDiaryEntry,
+} from '@/features/food/model';
+import { addEntry, removeEntry } from '@/features/food/operations';
+import { validateRecipe } from './domain';
+import type { Recipe } from './model';
+
+function ensureCurrent(current: Recipe | undefined, expected: Recipe) {
+  if (!current || JSON.stringify(current) !== JSON.stringify(expected))
+    throw new Error('Рецепт изменился. Откройте его заново.');
+}
+
+export function saveRecipe(
+  state: FoodState,
+  recipe: Recipe,
+  previous?: Recipe,
+): FoodState {
+  validateRecipe(recipe);
+  const existing = state.recipes.find((r) => r.id === recipe.id);
+  if (previous) ensureCurrent(existing, previous);
+  else if (existing) return state;
+  return {
+    ...state,
+    recipes: existing
+      ? state.recipes.map((r) => (r.id === recipe.id ? recipe : r))
+      : [...state.recipes, recipe],
+  };
+}
+
+export function duplicateRecipe(recipe: Recipe): Recipe {
+  const now = new Date().toISOString();
+  return {
+    ...recipe,
+    id: newId(),
+    name: `${recipe.name} (копия)`,
+    isFavorite: false,
+    createdAt: now,
+    updatedAt: now,
+    ingredients: recipe.ingredients.map((i) => ({ ...i, id: newId() })),
+  };
+}
+
+export function deleteRecipe(
+  state: FoodState,
+  id: string,
+  previous?: Recipe,
+): FoodState {
+  if (previous)
+    ensureCurrent(
+      state.recipes.find((r) => r.id === id),
+      previous,
+    );
+  return { ...state, recipes: state.recipes.filter((r) => r.id !== id) };
+}
+
+export function addRecipeEntry(
+  state: FoodState,
+  id: string,
+  amount: number,
+  unit: RecipeDiaryEntry['unit'],
+  meal: MealType,
+  date: string,
+  entryId: string,
+  previous?: Recipe,
+): FoodState {
+  if (state.entries.some((entry) => entry.id === entryId)) return state;
+  const recipe = state.recipes.find((r) => r.id === id);
+  if (previous) ensureCurrent(recipe, previous);
+  if (!recipe) throw new Error('Рецепт уже удалён.');
+  const snapshot = {
+    total: validateRecipe(recipe).total,
+    servings: recipe.servings,
+    cookedWeightGrams: recipe.cookedWeightGrams,
+  };
+  return addEntry(
+    state,
+    makeRecipeEntry(
+      { id, name: recipe.name },
+      snapshot,
+      amount,
+      unit,
+      meal,
+      date,
+      entryId,
+    ),
+  );
+}
+
+function makeRecipeEntry(
+  product: RecipeDiaryEntry['product'],
+  recipe: RecipeDiaryEntry['recipe'],
+  amount: number,
+  unit: RecipeDiaryEntry['unit'],
+  meal: MealType,
+  date: string,
+  id: string,
+): RecipeDiaryEntry {
+  parseDateKey(date);
+  if (!Object.hasOwn(meals, meal)) throw new Error('Выберите приём пищи.');
+  const { grams } = recipePortion(recipe, amount, unit);
+  return {
+    id,
+    product,
+    recipe,
+    amount,
+    unit,
+    grams,
+    meal,
+    date,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function getCurrentEntry(
+  state: FoodState,
+  previous: RecipeDiaryEntry,
+): RecipeDiaryEntry {
+  const current = state.entries.find((entry) => entry.id === previous.id);
+  if (!current?.recipe || JSON.stringify(current) !== JSON.stringify(previous))
+    throw new Error('Запись изменилась. Откройте её заново.');
+  return current;
+}
+
+export function deleteRecipeEntry(
+  state: FoodState,
+  previous: RecipeDiaryEntry,
+): FoodState {
+  return removeEntry(state, getCurrentEntry(state, previous).id);
+}
+
+export function editRecipeEntry(
+  state: FoodState,
+  previous: RecipeDiaryEntry,
+  amount: number,
+  unit: RecipeDiaryEntry['unit'],
+  meal: MealType,
+  date: string,
+  copyId?: string,
+): FoodState {
+  const current = getCurrentEntry(state, previous);
+  if (copyId && state.entries.some((entry) => entry.id === copyId))
+    return state;
+  const next = makeRecipeEntry(
+    current.product,
+    current.recipe,
+    amount,
+    unit,
+    meal,
+    date,
+    copyId ?? current.id,
+  );
+  if (copyId) return addEntry(state, next);
+  const entries = state.entries.map((entry) =>
+    entry.id === current.id ? { ...next, createdAt: current.createdAt } : entry,
+  );
+  checkDayNutrition(entries, date);
+  return { ...state, entries };
+}

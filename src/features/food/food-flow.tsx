@@ -1,14 +1,21 @@
 import { useState } from 'react';
-import type { FoodDiaryEntry, FoodProduct, MealType } from './model';
+import type {
+  FoodDiaryEntry,
+  FoodProduct,
+  MealType,
+  ProductDiaryEntry,
+} from './model';
 import { FoodSearch } from './food-search';
 import { ProductDetail } from './product-detail';
 import { ProductEditor } from './product-editor';
 import { ScannerScreen } from './scanner-screen';
+import { RecipeFlow } from '@/features/recipes/recipe-flow';
+import { RecipeLog } from '@/features/recipes/recipe-log';
 
 type Page =
-  | { kind: 'search' }
+  | { kind: 'search' | 'recipes' }
   | { kind: 'scanner' }
-  | { kind: 'detail'; product: FoodProduct; entry?: FoodDiaryEntry }
+  | { kind: 'detail'; product: FoodProduct; entry?: ProductDiaryEntry }
   | { kind: 'editor'; product?: FoodProduct; barcode?: string };
 export function FoodFlow({
   date,
@@ -16,18 +23,40 @@ export function FoodFlow({
   entry,
   scan = false,
   onClose,
+  onLogged,
 }: {
   date: string;
   meal?: MealType;
   entry?: FoodDiaryEntry;
   scan?: boolean;
   onClose(): void;
+  onLogged(message: string, date: string): void;
 }) {
   const [page, setPage] = useState<Page>(() =>
-    entry
+    entry && !entry.recipe
       ? { kind: 'detail', product: entry.product, entry }
       : { kind: scan ? 'scanner' : 'search' },
   );
+  if (entry?.recipe)
+    return (
+      <RecipeLog
+        entry={entry}
+        date={date}
+        meal={meal}
+        onBack={onClose}
+        onSaved={onLogged}
+      />
+    );
+  if (page.kind === 'recipes')
+    return (
+      <RecipeFlow
+        choose
+        date={date}
+        meal={meal}
+        onClose={() => setPage({ kind: 'search' })}
+        onLogged={onLogged}
+      />
+    );
   if (page.kind === 'editor')
     return (
       <ProductEditor
@@ -63,6 +92,7 @@ export function FoodFlow({
       onProduct={(product) => setPage({ kind: 'detail', product })}
       onCreate={() => setPage({ kind: 'editor' })}
       onScan={() => setPage({ kind: 'scanner' })}
+      onRecipes={() => setPage({ kind: 'recipes' })}
     />
   );
 }

@@ -1,5 +1,5 @@
 import {
-  gramsFor,
+  checkDayNutrition,
   makeEntry,
   newId,
   parseDateKey,
@@ -40,9 +40,14 @@ export function deleteProduct(state: FoodState, id: string): FoodState {
   };
 }
 export function addEntry(state: FoodState, entry: FoodDiaryEntry): FoodState {
+  const entries = [...state.entries, entry];
+  if (entry.recipe) {
+    checkDayNutrition(entries, entry.date);
+    return { ...state, entries };
+  }
   return {
     ...state,
-    entries: [...state.entries, entry],
+    entries,
     recent: [
       { productId: entry.product.id, usedAt: new Date().toISOString() },
       ...state.recent.filter((r) => r.productId !== entry.product.id),
@@ -58,7 +63,8 @@ export function editEntry(
   date: string,
 ): FoodState {
   const entry = state.entries.find((e) => e.id === id);
-  if (!entry) throw new Error('Запись уже удалена. Обновите дневник.');
+  if (!entry || entry.recipe)
+    throw new Error('Запись уже удалена. Обновите дневник.');
   const updated = makeEntry(entry.product, amount, unit, meal, date);
   return {
     ...state,
@@ -85,7 +91,6 @@ export function copyMeal(
           ...e,
           id: newId(),
           date: to,
-          grams: gramsFor(e.product, e.amount, e.unit),
           createdAt: new Date().toISOString(),
         }),
       state,

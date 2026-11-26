@@ -852,6 +852,59 @@ test('холодный запуск после полного перезапус
     await ready(page);
     await selectTheme(page, 'Тёмная');
     await setting(page, 'offline_check', 'retained');
+    const button = (name: string) =>
+      page
+        .getByRole('button', { name, exact: true })
+        .and(page.locator(':not([inert] *)'));
+    await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+    await button('Мои рецепты').click();
+    await button('Создать рецепт').click();
+    await page
+      .getByLabel('Название блюда', { exact: true })
+      .fill('Банановый перекус');
+    await button('Добавить ингредиент').click();
+    await page
+      .getByLabel('Название или штрихкод продукта', { exact: true })
+      .fill('банан');
+    await button('Выбрать: Банан').click();
+    await button('Сохранить рецепт').click();
+    await button('Добавить в дневник').click();
+    await expect(
+      page.getByText(
+        'Для записи в граммах укажите фактический вес готового блюда в рецепте.',
+      ),
+    ).toBeVisible();
+    await button('Добавить в дневник').click();
+    await expect(
+      page.getByText('Блюдо добавлено в дневник.', { exact: true }),
+    ).toBeVisible();
+    const diary = await setting(page, 'food_diary_state');
+    expect(diary).toContain('Банановый перекус');
+    await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+    const updated = process.env.PWA_UPDATE_BUILD_DIR
+      ? site.deployExport(process.env.PWA_UPDATE_BUILD_DIR)
+      : site.deploy('recipes-update');
+    await button('Проверить обновления').click();
+    await button('Обновить').click();
+    await ready(page);
+    await expect(page.locator('meta[name="app-build"]')).toHaveAttribute(
+      'content',
+      updated,
+    );
+    expect(await setting(page, 'food_diary_state')).toBe(diary);
+    await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+    await button('Мои рецепты').click();
+    await expect(button('Открыть: Банановый перекус')).toBeVisible();
+    await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+    const afterBrowsing = site.deploy('after-recipe-list');
+    await button('Проверить обновления').click();
+    await expect(button('Обновить')).toBeEnabled();
+    await button('Обновить').click();
+    await ready(page);
+    await expect(page.locator('meta[name="app-build"]')).toHaveAttribute(
+      'content',
+      afterBrowsing,
+    );
     await persistent.close();
     persistent = await browser
       .browserType()
@@ -864,6 +917,11 @@ test('холодный запуск после полного перезапус
       page.getByRole('button', { name: 'Внешний вид, Тёмная', exact: true }),
     ).toBeVisible();
     expect(await setting(page, 'offline_check')).toBe('retained');
+    expect(await setting(page, 'food_diary_state')).toBe(diary);
+    await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+    await expect(button('Изменить запись: Банановый перекус')).toBeVisible();
+    await button('Мои рецепты').click();
+    await expect(button('Открыть: Банановый перекус')).toBeVisible();
   } finally {
     await persistent.close();
   }

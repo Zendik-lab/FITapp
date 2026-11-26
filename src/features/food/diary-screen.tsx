@@ -10,16 +10,18 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useSelectedDate } from '@/features/calendar/selected-date';
 import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
-import { formatNumber, sameDay } from '@/features/calendar/calendar';
+import { sameDay } from '@/features/calendar/calendar';
 import { describeError } from '@/database/storage-diagnostics';
 import { spacing } from '@/theme';
-import { dateKey, portion, sumEntries } from './domain';
+import { dateKey, entryNutrition, parseDateKey, sumEntries } from './domain';
 import { useFoodDiary } from './food-context';
 import { FoodFlow } from './food-flow';
 import { meals, type FoodDiaryEntry, type MealType } from './model';
 import { NutritionValues } from './nutrition-values';
 import { copyMeal } from './operations';
 import { DiaryStatus } from './diary-status';
+import { formatFoodQuantity } from './units';
+import { RecipeFlow } from '@/features/recipes/recipe-flow';
 
 export function DiaryScreen() {
   const session = useFoodDiary();
@@ -30,12 +32,19 @@ export function DiaryScreen() {
     scan?: boolean;
   } | null>(null);
   const [calculator, setCalculator] = useState(false);
+  const [recipes, setRecipes] = useState(false);
   const [updated, setUpdated] = useState(false);
   const [copying, setCopying] = useState<MealType | null>(null);
   const [notice, setNotice] = useState('');
   const date = dateKey(selectedDate);
   const disabled =
     !session || session.loading || session.pending || !!session.failure;
+  function onLogged(message: string, destination: string) {
+    selectDate(parseDateKey(destination));
+    setNotice(message);
+    setFlow(null);
+    setRecipes(false);
+  }
   if (calculator)
     return (
       <CalculatorScreen
@@ -46,7 +55,22 @@ export function DiaryScreen() {
       />
     );
   if (flow)
-    return <FoodFlow date={date} {...flow} onClose={() => setFlow(null)} />;
+    return (
+      <FoodFlow
+        date={date}
+        {...flow}
+        onClose={() => setFlow(null)}
+        onLogged={onLogged}
+      />
+    );
+  if (recipes)
+    return (
+      <RecipeFlow
+        date={date}
+        onClose={() => setRecipes(false)}
+        onLogged={onLogged}
+      />
+    );
   return (
     <ScreenContainer>
       <AppHeader
@@ -94,6 +118,13 @@ export function DiaryScreen() {
           setCalculator(true);
         }}
       />
+      <PrimaryButton
+        secondary
+        icon="BookOpen"
+        label="Мои рецепты"
+        disabled={disabled}
+        onPress={() => setRecipes(true)}
+      />
       <SectionHeader title="Дневник питания" />
       {Object.entries(meals).map(([key, title]) => {
         const meal = key as MealType;
@@ -114,11 +145,11 @@ export function DiaryScreen() {
               <View key={entry.id} style={styles.entry}>
                 <AppText variant="action">{entry.product.name}</AppText>
                 <AppText variant="caption" tone="muted">
-                  {formatNumber(entry.grams)} г
+                  {entry.unit === 'serving' && entry.recipe
+                    ? `${formatFoodQuantity(entry.amount)} порц.`
+                    : `${formatFoodQuantity(entry.grams ?? 0)} г`}
                 </AppText>
-                <NutritionValues
-                  values={portion(entry.product, entry.amount, entry.unit)}
-                />
+                <NutritionValues values={entryNutrition(entry)} />
                 <PrimaryButton
                   secondary
                   label={`Изменить запись: ${entry.product.name}`}

@@ -11,6 +11,8 @@ import { createFoodRepository } from '@/database/repositories/food';
 import { builtinFoods } from '@/features/food/catalog';
 import { makeEntry } from '@/features/food/domain';
 import { addEntry } from '@/features/food/operations';
+import { makeIngredient } from '@/features/recipes/domain';
+import { addRecipeEntry, saveRecipe } from '@/features/recipes/operations';
 import {
   defaultPreferences,
   resolveNutrition,
@@ -97,7 +99,7 @@ test('реальный SQLite обновляет схему v1 и сохраня
   expect(await storage.get('theme_mode')).toBe('dark');
   expect(
     sql.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
-  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
 });
 
 test('файловый SQLite восстанавливает профиль, анкету, цель и тему после закрытия соединения', async () => {
@@ -129,6 +131,28 @@ test('файловый SQLite восстанавливает профиль, а�
       '2026-11-26',
     );
     await createFoodRepository(storage).change((s) => addEntry(s, entry));
+    const recipe = {
+      id: 'sqlite-recipe',
+      name: 'На диске',
+      category: 'Другое' as const,
+      servings: 2,
+      isFavorite: true,
+      createdAt: entry.createdAt,
+      updatedAt: entry.createdAt,
+      ingredients: [makeIngredient(builtinFoods[0], 0.4, 'kg')],
+    };
+    await createFoodRepository(storage).change((s) => saveRecipe(s, recipe));
+    await createFoodRepository(storage).change((s) =>
+      addRecipeEntry(
+        s,
+        recipe.id,
+        0.5,
+        'serving',
+        'lunch',
+        entry.date,
+        'sqlite-entry',
+      ),
+    );
     sql.close();
     sql = new DatabaseSync(file);
     await migrateDatabase(mockDatabase);
@@ -139,9 +163,17 @@ test('файловый SQLite восстанавливает профиль, а�
     expect(state.profile?.goals.targetWeightKg).toBe(79);
     expect(await reopened.get('theme_mode')).toBe('dark');
     expect(await createNutritionRepository(reopened).load()).toEqual(nutrition);
-    expect((await createFoodRepository(reopened).load()).entries).toEqual([
-      entry,
-    ]);
+    const diary = await createFoodRepository(reopened).load();
+    expect(await reopened.get('recipes_schema')).toBe('1');
+    expect(diary.recipes).toEqual([recipe]);
+    expect(diary.entries).toHaveLength(2);
+    expect(diary.entries[0]).toEqual(entry);
+    expect(diary.entries[1]).toMatchObject({
+      id: 'sqlite-entry',
+      amount: 0.5,
+      grams: null,
+      recipe: { servings: 2 },
+    });
   } finally {
     sql.close();
     sql = new DatabaseSync(':memory:');
