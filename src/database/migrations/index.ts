@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { initialMigration } from './001-initial';
 import { userStateMigration } from './002-user-state';
+import { foodDiaryMigration } from './003-food-diary';
 
 type Migration = {
   version: number;
@@ -14,7 +15,11 @@ type Database = Pick<
   'execAsync' | 'getAllAsync' | 'runAsync' | 'withTransactionAsync'
 >;
 
-const migrations: readonly Migration[] = [initialMigration, userStateMigration];
+const migrations: readonly Migration[] = [
+  initialMigration,
+  userStateMigration,
+  foodDiaryMigration,
+];
 
 export async function migrateDatabase(
   database: Database,

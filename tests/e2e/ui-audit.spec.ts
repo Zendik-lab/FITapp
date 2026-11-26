@@ -38,7 +38,7 @@ async function seed(
   await page.evaluate(
     ({ draft, step }) =>
       new Promise<void>((done, reject) => {
-        const request = indexedDB.open('masstracker', 2);
+        const request = indexedDB.open('masstracker', 3);
         request.onupgradeneeded = () =>
           request.result.createObjectStore('app_settings', { keyPath: 'key' });
         request.onerror = () => reject(request.error);
@@ -247,7 +247,7 @@ test('загрузка и ошибка профиля доступны на ни
   await page.evaluate(
     () =>
       new Promise<void>((done, reject) => {
-        const request = indexedDB.open('masstracker', 2);
+        const request = indexedDB.open('masstracker');
         request.onsuccess = () => {
           const db = request.result;
           const transaction = db.transaction('app_settings', 'readwrite');

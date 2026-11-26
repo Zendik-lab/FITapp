@@ -12,6 +12,7 @@ import { StartupGate } from '@/features/startup/startup-gate';
 import { ProfileProvider } from '@/features/profile/profile-provider';
 import { OnboardingGate } from '@/features/profile/onboarding-screen';
 import { NutritionProvider } from '@/features/nutrition/nutrition-provider';
+import { FoodProvider } from '@/features/food/food-provider';
 import { radii, touchSize, typography, useAppTheme } from '@/theme';
 import { NavigationAppearance } from '@/theme/navigation-appearance';
 
@@ -33,7 +34,9 @@ export default function TabLayout() {
               <ProfileProvider>
                 <OnboardingGate>
                   <NutritionProvider>
-                    <AppTabs />
+                    <FoodProvider>
+                      <AppTabs />
+                    </FoodProvider>
                   </NutritionProvider>
                 </OnboardingGate>
               </ProfileProvider>

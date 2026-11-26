@@ -20,8 +20,14 @@ import { demoLabel, getDemoDay } from './demo-data';
 import { useProfile } from '@/features/profile/profile-context';
 import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
+import { useFoodDiary } from '@/features/food/food-context';
+import { DiaryScreen } from '@/features/food/diary-screen';
 
 export function NutritionScreen() {
+  const diary = useFoodDiary();
+  return diary ? <DiaryScreen /> : <DemoNutritionScreen />;
+}
+function DemoNutritionScreen() {
   const profile = useProfile()?.state.profile;
   const [calculator, setCalculator] = useState(false);
   const [updated, setUpdated] = useState(false);

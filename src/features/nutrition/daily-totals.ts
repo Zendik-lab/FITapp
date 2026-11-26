@@ -11,7 +11,7 @@ export interface DailyNutrition {
   }[];
 }
 
-/** The future diary supplies real totals for the selected day through this boundary. */
+/** Shared target/consumption display boundary; the diary supplies the selected day's totals. */
 export function getDailyNutrition(
   targets: NutritionTargets,
   consumed: NutritionTargets = { calories: 0, protein: 0, fat: 0, carbs: 0 },

@@ -36,8 +36,9 @@ export function CalorieCard({
             </AppText>
           </View>
           <AppText variant="caption" tone="accentText">
-            {formatNumber(Math.max(0, day.calorieGoal - day.calories))} ккал
-            осталось
+            {day.calories > day.calorieGoal
+              ? `На ${formatNumber(day.calories - day.calorieGoal)} ккал больше цели`
+              : `${formatNumber(day.calorieGoal - day.calories)} ккал осталось`}
           </AppText>
         </View>
         <ProgressRing

@@ -11,6 +11,17 @@
       "output": "single",
       "lang": "ru-KZ"
     },
-    "plugins": ["expo-router", "expo-status-bar", "expo-sqlite"]
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Разрешите MassTracker использовать камеру для сканирования штрихкодов продуктов.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ]
   }
 }

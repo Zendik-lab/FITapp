@@ -5,6 +5,9 @@ import { SectionHeader } from '@/components/headers';
 import { CalorieCard } from '@/features/demo/calorie-card';
 import { getDailyNutrition } from './daily-totals';
 import { useNutrition } from './nutrition-context';
+import { useFoodDiary } from '@/features/food/food-context';
+import { dateKey, sumEntries } from '@/features/food/domain';
+import { useSelectedDate } from '@/features/calendar/selected-date';
 
 export function NutritionSummary({
   onOpen,
@@ -14,12 +17,17 @@ export function NutritionSummary({
   dominant?: boolean;
 }) {
   const session = useNutrition();
+  const diary = useFoodDiary();
+  const { selectedDate } = useSelectedDate();
   return (
     <>
       {session?.snapshot ? (
         <CalorieCard
           dominant={dominant}
-          day={getDailyNutrition(session.snapshot.targets)}
+          day={getDailyNutrition(
+            session.snapshot.targets,
+            sumEntries(diary?.state.entries ?? [], dateKey(selectedDate)),
+          )}
         />
       ) : (
         <Card>

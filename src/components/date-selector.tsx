@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -17,6 +18,7 @@ import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 import { AppText } from './app-text';
 import { IconButton } from './buttons';
 import { Card } from './card';
+import { CalendarPicker } from './calendar-picker';
 
 const fullDate = {
   weekday: 'long',
@@ -30,27 +32,32 @@ export function DateSelector({
   date,
   today,
   onChange,
+  daily = false,
 }: {
   date: Date;
   today: Date;
   onChange: (date: Date) => void;
+  daily?: boolean;
 }) {
+  const [calendar, setCalendar] = useState(false);
   const { colors } = useAppTheme();
   const { width } = useWindowDimensions();
   return (
     <Card style={styles.calendar}>
       <View style={styles.controls}>
         <IconButton
-          label="Предыдущая неделя"
+          label={daily ? 'Предыдущий день' : 'Предыдущая неделя'}
           icon="ChevronLeft"
-          onPress={() => onChange(addDays(date, -7))}
+          onPress={() => onChange(addDays(date, daily ? -1 : -7))}
           compact
         />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={formatDate(date, shortDate)}
-          accessibilityHint="Возвращает к сегодняшней дате."
-          onPress={() => onChange(today)}
+          accessibilityHint={
+            daily ? 'Открывает календарь.' : 'Возвращает к сегодняшней дате.'
+          }
+          onPress={() => (daily ? setCalendar(true) : onChange(today))}
           style={({ pressed }) => [
             styles.current,
             { opacity: pressed ? 0.6 : 1 },
@@ -61,9 +68,9 @@ export function DateSelector({
           </AppText>
         </Pressable>
         <IconButton
-          label="Следующая неделя"
+          label={daily ? 'Следующий день' : 'Следующая неделя'}
           icon="ChevronRight"
-          onPress={() => onChange(addDays(date, 7))}
+          onPress={() => onChange(addDays(date, daily ? 1 : 7))}
           compact
         />
       </View>
@@ -123,6 +130,14 @@ export function DateSelector({
           );
         })}
       </ScrollView>
+      {calendar && (
+        <CalendarPicker
+          date={date}
+          today={today}
+          onChange={onChange}
+          onDismiss={() => setCalendar(false)}
+        />
+      )}
     </Card>
   );
 }

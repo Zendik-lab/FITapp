@@ -56,25 +56,22 @@ test('открывает «Сегодня» и переключает все п�
   // Five complete screens now render real SVG trees in the native test renderer.
 }, 15000);
 
-test('переносит выбранную дату между разделами и показывает статус будущих функций', async () => {
+test('переносит выбранную дату в дневник и открывает ручной сканер', async () => {
   await renderRouter('./app');
 
   await fireEvent.press(
     await screen.findByRole('button', { name: 'Предыдущая неделя' }),
   );
   await fireEvent.press(screen.getByLabelText('Питание'));
+  expect(await screen.findByText('Завтрак')).toBeTruthy();
   expect(
-    await screen.findByText(
-      'Записей нет. Дневник питания появится на этапе 04.',
-    ),
-  ).toBeTruthy();
-  expect(screen.queryByText('Завтрак')).toBeNull();
+    screen.getAllByText('Пока нет записей. Добавьте первый продукт.'),
+  ).toHaveLength(4);
   await fireEvent.press(
     screen.getByRole('button', { name: 'Сканировать штрихкод' }),
   );
-  expect(await screen.findByText(/функция ещё разрабатывается/i)).toBeTruthy();
-  await fireEvent.press(screen.getByRole('button', { name: 'Понятно' }));
-  expect(screen.queryByText(/функция ещё разрабатывается/i)).toBeNull();
+  expect(await screen.findByLabelText('Штрихкод')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Открыть камеру' })).toBeTruthy();
 });
 
 test('переключает период графика', async () => {

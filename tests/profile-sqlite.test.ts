@@ -7,6 +7,10 @@ import { createProfileRepository } from '@/database/repositories/profile';
 import { initialMigration } from '@/database/migrations/001-initial';
 import { sampleDraft } from './fixtures/profile';
 import { createNutritionRepository } from '@/database/repositories/nutrition';
+import { createFoodRepository } from '@/database/repositories/food';
+import { builtinFoods } from '@/features/food/catalog';
+import { makeEntry } from '@/features/food/domain';
+import { addEntry } from '@/features/food/operations';
 import {
   defaultPreferences,
   resolveNutrition,
@@ -93,7 +97,7 @@ test('реальный SQLite обновляет схему v1 и сохраня
   expect(await storage.get('theme_mode')).toBe('dark');
   expect(
     sql.prepare('SELECT version FROM schema_migrations ORDER BY version').all(),
-  ).toEqual([{ version: 1 }, { version: 2 }]);
+  ).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
 });
 
 test('файловый SQLite восстанавливает профиль, анкету, цель и тему после закрытия соединения', async () => {
@@ -117,6 +121,14 @@ test('файловый SQLite восстанавливает профиль, а�
     }).snapshot;
     if (!nutrition) throw new Error('Missing test nutrition targets');
     await createNutritionRepository(storage).save(nutrition);
+    const entry = makeEntry(
+      builtinFoods[0],
+      150.5,
+      'g',
+      'breakfast',
+      '2026-11-26',
+    );
+    await createFoodRepository(storage).change((s) => addEntry(s, entry));
     sql.close();
     sql = new DatabaseSync(file);
     await migrateDatabase(mockDatabase);
@@ -127,6 +139,9 @@ test('файловый SQLite восстанавливает профиль, а�
     expect(state.profile?.goals.targetWeightKg).toBe(79);
     expect(await reopened.get('theme_mode')).toBe('dark');
     expect(await createNutritionRepository(reopened).load()).toEqual(nutrition);
+    expect((await createFoodRepository(reopened).load()).entries).toEqual([
+      entry,
+    ]);
   } finally {
     sql.close();
     sql = new DatabaseSync(':memory:');

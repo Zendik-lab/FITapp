@@ -26,6 +26,12 @@ import { useProfile } from '@/features/profile/profile-context';
 import { goalLabels } from '@/features/profile/options';
 import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
+import { useFoodDiary } from '@/features/food/food-context';
+import { FoodFlow } from '@/features/food/food-flow';
+import { DiaryStatus } from '@/features/food/diary-status';
+import { dateKey, portion } from '@/features/food/domain';
+import { NutritionValues } from '@/features/food/nutrition-values';
+import type { FoodDiaryEntry } from '@/features/food/model';
 
 const quickActions: readonly { label: string; icon: AppIconName }[] = [
   { label: 'Добавить еду', icon: 'Utensils' },
@@ -36,6 +42,8 @@ const quickActions: readonly { label: string; icon: AppIconName }[] = [
 
 export function TodayScreen() {
   const [calculator, setCalculator] = useState(false);
+  const diary = useFoodDiary();
+  const [food, setFood] = useState<{ entry?: FoodDiaryEntry } | null>(null);
   const profile = useProfile()?.state.profile;
   const { colors } = useAppTheme();
   const { fontScale, width } = useWindowDimensions();
@@ -46,6 +54,14 @@ export function TodayScreen() {
 
   if (calculator)
     return <CalculatorScreen onClose={() => setCalculator(false)} />;
+  if (food)
+    return (
+      <FoodFlow
+        date={dateKey(selectedDate)}
+        entry={food.entry}
+        onClose={() => setFood(null)}
+      />
+    );
 
   return (
     <ScreenContainer>
@@ -63,6 +79,7 @@ export function TodayScreen() {
         />
       </View>
       <DateSelector date={selectedDate} today={today} onChange={selectDate} />
+      {diary && <DiaryStatus />}
       <View style={styles.group}>
         {profile ? (
           <NutritionSummary dominant onOpen={() => setCalculator(true)} />
@@ -75,6 +92,37 @@ export function TodayScreen() {
           </>
         )}
       </View>
+      {diary && (
+        <View style={styles.group}>
+          <SectionHeader title="Последние продукты" />
+          {diary.state.entries
+            .filter((e) => e.date === dateKey(selectedDate))
+            .slice(-3)
+            .reverse()
+            .map((entry) => (
+              <Card key={entry.id}>
+                <AppText variant="action">
+                  {entry.product.name} · {formatNumber(entry.grams)} г
+                </AppText>
+                <NutritionValues
+                  values={portion(entry.product, entry.amount, entry.unit)}
+                />
+                <IconButton
+                  icon="ChevronRight"
+                  label={`Открыть запись: ${entry.product.name}`}
+                  onPress={() => setFood({ entry })}
+                />
+              </Card>
+            ))}
+          {!diary.state.entries.some(
+            (e) => e.date === dateKey(selectedDate),
+          ) && (
+            <AppText tone="muted">
+              В выбранный день пока нет записей питания.
+            </AppText>
+          )}
+        </View>
+      )}
       <View
         style={[
           styles.stats,
@@ -146,7 +194,11 @@ export function TodayScreen() {
             <Pressable
               key={label}
               accessibilityRole="button"
-              onPress={() => showComingSoon(label)}
+              onPress={() =>
+                label === 'Добавить еду' && diary
+                  ? setFood({})
+                  : showComingSoon(label)
+              }
               style={({ pressed }) => [
                 styles.action,
                 {

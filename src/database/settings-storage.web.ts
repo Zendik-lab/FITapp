@@ -24,6 +24,13 @@ const migrations = [
       updatedAt: new Date().toISOString(),
     } satisfies Setting);
   },
+  (_database: IDBDatabase, transaction: IDBTransaction) => {
+    transaction.objectStore(storeName).put({
+      key: 'food_diary_schema',
+      value: '1',
+      updatedAt: new Date().toISOString(),
+    } satisfies Setting);
+  },
 ];
 
 let connection: Promise<SettingsStorage> | undefined;
