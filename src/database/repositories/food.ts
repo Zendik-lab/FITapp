@@ -56,6 +56,10 @@ function recipe(value: unknown): value is Recipe {
       !['Простой', 'Средний', 'Сложный'].includes(
         String(metadata.difficulty),
       ) ||
+      (metadata.seasoningNote !== undefined &&
+        typeof metadata.seasoningNote !== 'string') ||
+      (metadata.provenance !== undefined &&
+        typeof metadata.provenance !== 'string') ||
       !['tags', 'steps', 'sources'].every((key) => strings(metadata[key])))
   )
     return false;

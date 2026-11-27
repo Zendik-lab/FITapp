@@ -6,11 +6,17 @@ export interface LibraryRecipeData {
   description: string;
   category: RecipeCategory;
   tags: readonly string[];
-  ingredients: readonly (readonly [productNameOrId: string, grams: number])[];
+  ingredients: readonly (readonly [
+    productNameOrId: string,
+    grams: number,
+    displayName?: string,
+  ])[];
   servings: number;
   prep: number;
   cook: number;
   difficulty: NonNullable<Recipe['metadata']>['difficulty'];
   steps: readonly string[];
   weight?: number;
+  source?: string;
+  seasoningNote?: string;
 }

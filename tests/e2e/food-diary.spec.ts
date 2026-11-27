@@ -3,6 +3,7 @@ import type { Server } from 'node:http';
 import { resolve } from 'node:path';
 import { createStaticServer } from '../../scripts/serve-web.cjs';
 import { sampleDraft } from '../fixtures/profile';
+import { unitoolsRecipes } from '../../src/features/recipes/library-unitools';
 
 let server: Server;
 let url: string;
@@ -124,9 +125,10 @@ async function state(page: Page) {
           date: string;
           meal: string;
           grams: number;
-          product: { name: string; per100: { calories: number } };
+          product: { id: string; name: string; per100: { calories: number } };
         }[];
         products: { id: string }[];
+        recipes?: { id: string; name: string }[];
         favorites: unknown[];
         recent: unknown[];
       }>((done, reject) => {
@@ -602,7 +604,9 @@ test('готовый каталог, поиск, фильтры, продукт�
   await context.setOffline(true);
   await button(page, 'Рецепты').click();
   await expect(
-    page.getByText('Найдено рецептов: 150', { exact: true }),
+    page.getByText(`Найдено рецептов: ${150 + unitoolsRecipes.length}`, {
+      exact: true,
+    }),
   ).toBeVisible();
   await typeStable(page, 'Поиск рецептов', 'овсянка с яблоком');
   const name = 'Молочная овсянка с яблоком';
@@ -642,4 +646,41 @@ test('готовый каталог, поиск, фильтры, продукт�
   await expect(button(page, 'Открыть: ' + name)).toBeVisible();
   await button(page, 'Очистить историю').click();
   await expect(button(page, 'овсянка с яблоком')).toHaveCount(0);
+});
+
+test('импортированный рецепт офлайн ищется по составу, копируется и записывается в дневник', async ({
+  page,
+  context,
+}) => {
+  await seed(page);
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Рецепты').click();
+  await button(page, 'Следующая страница').click();
+  await expect(button(page, 'Предыдущая страница')).toBeEnabled();
+  await typeStable(page, 'Поиск рецептов', 'булгур мята');
+  const name = 'Табуле';
+  await button(page, 'Фильтры').click();
+  await typeStable(page, 'Калории до, ккал', '1');
+  await button(page, 'Применить фильтры').click();
+  await expect(button(page, 'Открыть: ' + name)).toHaveCount(0);
+  await button(page, 'Калории до, ккал 1 ×').click();
+  await button(page, 'Открыть: ' + name).click();
+  await expect(page.getByText(/UniTools — theunitools.com/)).toBeVisible();
+  await page.getByLabel('Приготовить порций', { exact: true }).fill('8');
+  await expect(button(page, 'Сбросить масштаб')).toBeEnabled();
+  await button(page, 'В избранное').click();
+  await expect(button(page, 'Убрать из избранного')).toBeEnabled();
+  await button(page, 'Скопировать в мои рецепты').click();
+  await expect.poll(async () => (await state(page)).recipes?.length).toBe(1);
+  await button(page, 'Избранное').click();
+  await button(page, 'Открыть: ' + name).click();
+  await button(page, 'Добавить в дневник').click();
+  await button(page, 'Добавить в дневник').click();
+  const [entry] = (await state(page)).entries;
+  expect(entry.product.id).toBe('library:unitools-tabbouleh');
 });

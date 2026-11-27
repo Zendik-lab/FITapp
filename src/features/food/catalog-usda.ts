@@ -2,7 +2,7 @@
 // https://fdc.nal.usda.gov/download-datasets/
 // Nutrient IDs: 1008 (kcal), 1003 (protein), 1004 (fat), 1005 (carbohydrate).
 // Each value refers to the edible reference food per 100 g.
-type FdcRow = readonly [
+export type FdcRow = readonly [
   fdcId: number,
   name: string,
   category: number,

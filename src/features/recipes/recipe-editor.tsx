@@ -319,6 +319,12 @@ export function RecipeEditor({
                 .map((step) => step.trim())
                 .filter(Boolean),
               sources,
+              ...(original?.metadata?.provenance
+                ? { provenance: original.metadata.provenance }
+                : {}),
+              ...(original?.metadata?.seasoningNote
+                ? { seasoningNote: original.metadata.seasoningNote }
+                : {}),
             }
           : undefined,
       isFavorite: original?.isFavorite ?? false,

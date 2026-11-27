@@ -60,5 +60,7 @@ export interface Recipe extends Omit<RecipeNutritionSnapshot, 'total'> {
     tags: readonly string[];
     steps: readonly string[];
     sources: readonly string[];
+    provenance?: string;
+    seasoningNote?: string;
   };
 }

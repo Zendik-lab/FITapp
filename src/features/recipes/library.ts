@@ -2,9 +2,10 @@ import { builtinFoods } from '@/features/food/catalog';
 import { validateRecipe } from './domain';
 import { libraryData } from './library-data';
 import type { LibraryRecipeData } from './library-types';
+import { unitoolsRecipes } from './library-unitools';
 import type { Recipe } from './model';
 
-export const recipeLibraryVersion = 1;
+export const recipeLibraryVersion = 2;
 const releaseDate = '2026-11-27T00:00:00.000Z';
 const productsByName = new Map(builtinFoods.map((food) => [food.name, food]));
 const productsById = new Map(builtinFoods.map((food) => [food.id, food]));
@@ -12,22 +13,24 @@ const productsById = new Map(builtinFoods.map((food) => [food.id, food]));
 function buildRecipe(row: LibraryRecipeData): Recipe {
   const id = `library:${row.id}`;
   const sources = new Set<string>();
-  const ingredients = row.ingredients.map(([key, grams], index) => {
-    const product = productsById.get(key) ?? productsByName.get(key);
-    if (!product)
-      throw new Error(`В рецепте ${id} отсутствует продукт «${key}».`);
-    sources.add(product.source);
-    return {
-      id: `${id}:${index + 1}`,
-      productId: product.id,
-      productName: product.name,
-      quantity: grams,
-      unit: 'g' as const,
-      gramsPerUnit: 1,
-      normalizedQuantity: grams,
-      nutritionSnapshot: { ...product.per100 },
-    };
-  });
+  const ingredients = row.ingredients.map(
+    ([key, grams, displayName], index) => {
+      const product = productsById.get(key) ?? productsByName.get(key);
+      if (!product)
+        throw new Error(`В рецепте ${id} отсутствует продукт «${key}».`);
+      sources.add(product.source);
+      return {
+        id: `${id}:${index + 1}`,
+        productId: product.id,
+        productName: displayName ?? product.name,
+        quantity: grams,
+        unit: 'g' as const,
+        gramsPerUnit: 1,
+        normalizedQuantity: grams,
+        nutritionSnapshot: { ...product.per100 },
+      };
+    },
+  );
   const recipe: Recipe = {
     id,
     name: row.name,
@@ -48,13 +51,18 @@ function buildRecipe(row: LibraryRecipeData): Recipe {
       steps: row.steps,
       tags: row.tags,
       sources: [...sources],
+      ...(row.source ? { provenance: row.source } : {}),
+      ...(row.seasoningNote ? { seasoningNote: row.seasoningNote } : {}),
     },
   };
   validateRecipe(recipe);
   return recipe;
 }
 
-export const builtinRecipes: readonly Recipe[] = libraryData.map(buildRecipe);
+export const builtinRecipes: readonly Recipe[] = [
+  ...libraryData,
+  ...unitoolsRecipes,
+].map(buildRecipe);
 const recipesById = new Map(
   builtinRecipes.map((recipe) => [recipe.id, recipe]),
 );

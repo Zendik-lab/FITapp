@@ -1,0 +1,13 @@
+MassTracker · Catalog data
+
+UniTools World Recipes v2.0.0, by UniTools — theunitools.com
+Source: https://theunitools.com/data/unitools-recipes-v1.json
+License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+The distributed subset is an adaptation by MassTracker under CC BY-SA 4.0.
+Changes include selection, categorization, conversion of ingredient quantities
+to reference masses, recalculation of nutrition, and omission of photos.
+
+U.S. Department of Agriculture, Agricultural Research Service.
+FoodData Central, Standard Reference Legacy, April 2018.
+Source: https://fdc.nal.usda.gov/download-datasets/
+License: CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/

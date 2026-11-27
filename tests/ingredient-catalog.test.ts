@@ -5,10 +5,10 @@ import {
 import { portion, searchFoods, unitsFor } from '@/features/food/domain';
 import { categories } from '@/features/food/model';
 
-test('справочник содержит не менее 250 разных записей USDA с устойчивыми ключами', () => {
+test('справочник содержит не менее 1871 разных записей USDA с устойчивыми ключами', () => {
   const sourced = builtinFoods.filter((food) => food.fdcId !== undefined);
-  expect(builtinFoodCatalogVersion).toBe(2);
-  expect(sourced.length).toBeGreaterThanOrEqual(250);
+  expect(builtinFoodCatalogVersion).toBe(3);
+  expect(sourced.length).toBeGreaterThanOrEqual(1871);
   expect(new Set(builtinFoods.map(({ id }) => id)).size).toBe(
     builtinFoods.length,
   );

@@ -101,7 +101,7 @@ export function RecipeFlow({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pantry, setPantry] = useState<readonly string[] | null>(null);
   const [ignoreBasics, setIgnoreBasics] = useState(true);
-  const [limit, setLimit] = useState(pageSize);
+  const [pageIndex, setPageIndex] = useState(0);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const state = session?.state ?? empty;
@@ -132,6 +132,11 @@ export function RecipeFlow({
       }),
     [index, filters, search, section, sort, pantry, ignoreBasics, remaining],
   );
+  const resultPage = Math.min(
+    pageIndex,
+    Math.max(0, Math.ceil(visible.length / pageSize) - 1),
+  );
+  const start = resultPage * pageSize;
   const disabled =
     !session || session.pending || session.loading || !!session.failure;
   const selected =
@@ -162,11 +167,11 @@ export function RecipeFlow({
   }
   function setFilterValues(value: RecipeFilters) {
     setFilters(value);
-    setLimit(pageSize);
+    setPageIndex(0);
   }
   function setSearch(value: string) {
     setQuery(value.slice(0, 120));
-    setLimit(pageSize);
+    setPageIndex(0);
   }
   function setIngredient(target: IngredientFilter, id: string) {
     if (target === 'pantry')
@@ -176,7 +181,7 @@ export function RecipeFlow({
         ...current,
         [target]: toggleValue(current[target] ?? [], id),
       }));
-    setLimit(pageSize);
+    setPageIndex(0);
   }
   function open(recipe: Recipe) {
     setPage({ kind: 'detail', id: recipe.id });
@@ -335,7 +340,7 @@ export function RecipeFlow({
             active={section === value}
             onPress={() => {
               setSection(value);
-              setLimit(pageSize);
+              setPageIndex(0);
             }}
           />
         ))}
@@ -390,7 +395,7 @@ export function RecipeFlow({
               if (section === 'recent') setSection('all');
               setSort(value);
             }
-            setLimit(pageSize);
+            setPageIndex(0);
             setSortOpen(false);
           }}
         />
@@ -448,7 +453,7 @@ export function RecipeFlow({
         expanded={pantry !== null}
         onPress={() => {
           setPantry(pantry === null ? [] : null);
-          setLimit(pageSize);
+          setPageIndex(0);
         }}
       />
       {pantry !== null && (
@@ -463,7 +468,7 @@ export function RecipeFlow({
               active={ignoreBasics}
               onPress={() => {
                 setIgnoreBasics(!ignoreBasics);
-                setLimit(pageSize);
+                setPageIndex(0);
               }}
             />
             {pantry.map((id) => (
@@ -539,12 +544,30 @@ export function RecipeFlow({
                 : 'Рецепты не найдены. Измените или сбросьте фильтры.'}
         </AppText>
       )}
+      {visible.length > pageSize && (
+        <View style={styles.row}>
+          <PrimaryButton
+            secondary
+            label="Предыдущая страница"
+            disabled={resultPage === 0}
+            onPress={() => setPageIndex(resultPage - 1)}
+          />
+          <PrimaryButton
+            secondary
+            label="Следующая страница"
+            disabled={start + pageSize >= visible.length}
+            onPress={() => setPageIndex(resultPage + 1)}
+          />
+        </View>
+      )}
       <View style={styles.grid}>
         {visible
-          .slice(0, limit)
+          .slice(start, start + pageSize)
           .map(({ recipe, nutrition, time, favorite, match }, index) => {
             const title = match ? pantryTitle(match.missing) : undefined;
-            const previous = visible[index - 1]?.match;
+            const previous = index
+              ? visible[start + index - 1]?.match
+              : undefined;
             const groupStarts =
               title && (!previous || title !== pantryTitle(previous.missing));
             return (
@@ -611,13 +634,6 @@ export function RecipeFlow({
             );
           })}
       </View>
-      {visible.length > limit && (
-        <PrimaryButton
-          secondary
-          label="Показать ещё рецепты"
-          onPress={() => setLimit((count) => count + pageSize)}
-        />
-      )}
     </FoodForm>
   );
 }

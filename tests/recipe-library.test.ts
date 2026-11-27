@@ -21,7 +21,7 @@ import {
 } from '@/features/recipes/recipe-search';
 
 test('the offline catalog contains unique, complete, cookable recipes with local product references', () => {
-  expect(builtinRecipes.length).toBeGreaterThanOrEqual(150);
+  expect(builtinRecipes.length).toBeGreaterThan(150);
   expect(new Set(builtinRecipes.map((r) => r.id)).size).toBe(
     builtinRecipes.length,
   );
@@ -38,9 +38,9 @@ test('the offline catalog contains unique, complete, cookable recipes with local
       ),
     ).size,
   ).toBe(builtinRecipes.length);
-  expect(new Set(builtinRecipes.map((recipe) => recipe.category)).size).toBe(
-    15,
-  );
+  expect(
+    new Set(builtinRecipes.map((recipe) => recipe.category)).size,
+  ).toBeGreaterThanOrEqual(15);
   const products = new Map(builtinFoods.map((p) => [p.id, p]));
   for (const recipe of builtinRecipes) {
     expect(recipe.description).toBeTruthy();

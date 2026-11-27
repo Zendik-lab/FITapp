@@ -100,6 +100,42 @@ export interface IndexedRecipe {
   lastUsed: string;
 }
 
+const recipeWords = new WeakMap<
+  readonly IndexedRecipe[],
+  ReadonlyMap<string, readonly IndexedRecipe[]>
+>();
+
+function searchCandidates(index: readonly IndexedRecipe[], terms: string[]) {
+  if (!terms.length) return index;
+  let postings = recipeWords.get(index);
+  if (!postings) {
+    const words = new Map<string, IndexedRecipe[]>();
+    for (const item of index) {
+      for (const word of new Set([...item.titleWords, ...item.words])) {
+        const matches = words.get(word);
+        if (matches) matches.push(item);
+        else words.set(word, [item]);
+      }
+    }
+    postings = words;
+    recipeWords.set(index, words);
+  }
+  // The same scorer covers exact, prefix, synonym and typo matches.
+  const candidates = terms.map((term) => {
+    const matches = new Set<IndexedRecipe>();
+    for (const [word, recipes] of postings) {
+      if (wordScore(term, [word])) {
+        for (const recipe of recipes) matches.add(recipe);
+      }
+    }
+    return matches;
+  });
+  candidates.sort((a, b) => a.size - b.size);
+  return [...candidates[0]].filter((item) =>
+    candidates.every((matches) => matches.has(item)),
+  );
+}
+
 export function buildRecipeIndex(
   recipes: readonly Recipe[],
   products: readonly FoodProduct[],
@@ -250,7 +286,7 @@ export function findRecipes(
   const terms = searchTerms(f.query ?? '');
   const phrase = normalizeSearch(f.query ?? '');
   const pantry = new Set(f.pantry);
-  const results = index.flatMap((item) => {
+  const results = searchCandidates(index, terms).flatMap((item) => {
     if (!matchesFilters(item, f)) return [];
     let score = phrase && item.title === phrase ? 1000 : 0;
     for (const term of terms) {

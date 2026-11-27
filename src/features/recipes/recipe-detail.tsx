@@ -133,7 +133,9 @@ export function RecipeDetail({
       {!!recipe.metadata?.sources.length && (
         <AppText variant="caption" tone="muted">
           КБЖУ рассчитаны по составу и приблизительны.{' '}
-          {recipe.metadata.sources.join(' · ')}
+          {[recipe.metadata.provenance, ...recipe.metadata.sources]
+            .filter(Boolean)
+            .join(' · ')}
         </AppText>
       )}
       <PrimaryButton
@@ -180,6 +182,11 @@ export function RecipeDetail({
       <AppText variant="section" accessibilityRole="header">
         Ингредиенты
       </AppText>
+      {!!recipe.metadata?.seasoningNote && (
+        <AppText variant="caption" tone="muted">
+          {recipe.metadata.seasoningNote}
+        </AppText>
+      )}
       {displayed.ingredients.map((item) => (
         <Card key={item.id}>
           <AppText variant="action">{item.productName}</AppText>

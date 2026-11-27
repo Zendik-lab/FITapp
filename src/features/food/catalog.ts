@@ -1,5 +1,6 @@
 import { categories, type FoodProduct } from './model';
 import { fdcRows } from './catalog-usda';
+import { fdcExpansion } from './catalog-usda-expansion';
 import { legacyAliases } from './catalog-aliases';
 
 // Approximate reference values per 100 g edible part; cooking and brands change them.
@@ -168,7 +169,7 @@ const legacyFoods: FoodProduct[] = rows.map(
   }),
 );
 
-const fdcFoods: FoodProduct[] = fdcRows.map(
+const fdcFoods: FoodProduct[] = [...fdcRows, ...fdcExpansion].map(
   ([
     fdcId,
     name,
@@ -196,7 +197,7 @@ const fdcFoods: FoodProduct[] = fdcRows.map(
   }),
 );
 
-export const builtinFoodCatalogVersion = 2;
+export const builtinFoodCatalogVersion = 3;
 export const builtinFoods: readonly FoodProduct[] = [
   ...legacyFoods,
   ...fdcFoods,
