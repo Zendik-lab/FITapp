@@ -12,11 +12,17 @@ import { ScannerScreen } from './scanner-screen';
 import { RecipeFlow } from '@/features/recipes/recipe-flow';
 import { RecipeLog } from '@/features/recipes/recipe-log';
 import { ScreenStack } from '@/components/screen-stack';
+import { CatalogPacksScreen } from '@/features/catalog/catalog-packs-screen';
 
 type Page =
-  | { kind: 'search' | 'recipes' }
+  | { kind: 'search' | 'recipes' | 'catalogs' }
   | { kind: 'scanner' }
-  | { kind: 'detail'; product: FoodProduct; entry?: ProductDiaryEntry }
+  | {
+      kind: 'detail';
+      product: FoodProduct;
+      entry?: ProductDiaryEntry;
+      offlineSaved?: boolean;
+    }
   | { kind: 'editor'; product?: FoodProduct; barcode?: string };
 export function FoodFlow({
   date,
@@ -49,6 +55,8 @@ export function FoodFlow({
       />
     );
   function renderDetail() {
+    if (page.kind === 'catalogs')
+      return <CatalogPacksScreen onBack={() => setPage({ kind: 'search' })} />;
     if (page.kind === 'recipes')
       return (
         <RecipeFlow
@@ -78,7 +86,9 @@ export function FoodFlow({
       return (
         <ScannerScreen
           onBack={() => setPage({ kind: 'search' })}
-          onProduct={(product) => setPage({ kind: 'detail', product })}
+          onProduct={(product, offlineSaved) =>
+            setPage({ kind: 'detail', product, offlineSaved })
+          }
           onCreate={(barcode) => setPage({ kind: 'editor', barcode })}
         />
       );
@@ -87,6 +97,7 @@ export function FoodFlow({
         <ProductDetail
           product={page.product}
           entry={page.entry}
+          offlineSaved={page.offlineSaved}
           date={date}
           meal={meal}
           onBack={() => (page.entry ? onClose() : setPage({ kind: 'search' }))}
@@ -106,6 +117,7 @@ export function FoodFlow({
           onCreate={() => setPage({ kind: 'editor' })}
           onScan={() => setPage({ kind: 'scanner' })}
           onRecipes={() => setPage({ kind: 'recipes' })}
+          onCatalogs={() => setPage({ kind: 'catalogs' })}
         />
       )}
     </ScreenStack>

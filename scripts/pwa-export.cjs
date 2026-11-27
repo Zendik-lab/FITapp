@@ -13,6 +13,8 @@ function listFiles(directory, prefix = '') {
     )
       return [];
     const path = `${prefix}${entry.name}`;
+    if (prefix.startsWith('catalog/') && path !== 'catalog/manifest.json')
+      return [];
     if (entry.isDirectory())
       return listFiles(join(directory, entry.name), `${path}/`);
     return /(?:^|\/)(?:sw.js|version.json|precache-manifest.json|metadata.json|404.html)$|\.map$/.test(

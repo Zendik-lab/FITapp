@@ -43,6 +43,13 @@ export interface RecipeNutritionSnapshot {
   cookedWeightGrams?: number;
 }
 
+export interface UnresolvedRecipeIngredient {
+  name: string;
+  quantity?: number;
+  unit: string;
+  sourceQuantity?: string;
+}
+
 export interface Recipe extends Omit<RecipeNutritionSnapshot, 'total'> {
   id: string;
   name: string;
@@ -63,6 +70,8 @@ export interface Recipe extends Omit<RecipeNutritionSnapshot, 'total'> {
     steps: readonly string[];
     sources: readonly string[];
     provenance?: string;
+    sourceUrl?: string;
     seasoningNote?: string;
+    unresolvedIngredients?: readonly UnresolvedRecipeIngredient[];
   };
 }

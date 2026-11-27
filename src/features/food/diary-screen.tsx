@@ -14,14 +14,19 @@ import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
 import { addDays, sameDay } from '@/features/calendar/calendar';
 import { spacing } from '@/theme';
-import { dateKey, entryNutrition, parseDateKey, sumEntries } from './domain';
+import {
+  dateKey,
+  entryNutrition,
+  formatEntryQuantity,
+  parseDateKey,
+  sumEntries,
+} from './domain';
 import { useFoodDiary } from './food-context';
 import { FoodFlow } from './food-flow';
 import { meals, type FoodDiaryEntry, type MealType } from './model';
 import { NutritionValues } from './nutrition-values';
 import { copyDay, removeEntry, restoreEntry } from './operations';
 import { DiaryStatus } from './diary-status';
-import { formatFoodQuantity } from './units';
 import { RecipeFlow } from '@/features/recipes/recipe-flow';
 import { useLocalAction } from '@/features/smart/use-local-action';
 import { PantryScreen } from '@/features/smart/pantry-screen';
@@ -268,9 +273,7 @@ export function DiaryScreen() {
                   <View style={styles.entry}>
                     <AppText variant="action">{entry.product.name}</AppText>
                     <AppText variant="caption" tone="muted">
-                      {entry.unit === 'serving' && entry.recipe
-                        ? `${formatFoodQuantity(entry.amount)} порц.`
-                        : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+                      {formatEntryQuantity(entry)}
                     </AppText>
                     <NutritionValues values={entryNutrition(entry)} />
                     <PrimaryButton

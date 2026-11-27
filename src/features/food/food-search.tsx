@@ -22,6 +22,7 @@ export function FoodSearch({
   onCreate,
   onScan,
   onRecipes,
+  onCatalogs,
 }: {
   active: boolean;
   onBack(): void;
@@ -29,6 +30,7 @@ export function FoodSearch({
   onCreate(): void;
   onScan(): void;
   onRecipes?(): void;
+  onCatalogs?(): void;
 }) {
   const session = useFoodDiary();
   const offline = useOfflineStatus();
@@ -95,7 +97,7 @@ export function FoodSearch({
                   ? 'Часть штрихкодов уже есть в локальной базе.'
                   : '',
                 result.incomplete
-                  ? `Без полных КБЖУ на 100 г: ${result.incomplete}.`
+                  ? `Без полных КБЖУ на 100 г или 100 мл: ${result.incomplete}.`
                   : '',
               ]
                 .filter(Boolean)
@@ -146,6 +148,13 @@ export function FoodSearch({
           label="Создать продукт"
           onPress={onCreate}
         />
+        {onCatalogs && (
+          <PrimaryButton
+            secondary
+            label="Офлайн-каталоги"
+            onPress={onCatalogs}
+          />
+        )}
       </View>
       <ProductPicker
         label="Название или штрихкод"

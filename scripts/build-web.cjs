@@ -7,6 +7,7 @@ const { sep } = require('node:path');
 const { version } = require('../package.json');
 const { generateServiceWorker } = require('./pwa-export.cjs');
 const { verifyWebBuild } = require('./verify-web.cjs');
+const { copyCatalogAssets } = require('./catalog-assets.cjs');
 
 const root = resolve(__dirname, '..');
 const buildId = randomBytes(10).toString('hex');
@@ -37,6 +38,15 @@ const result = spawnSync(
 );
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
+const catalogFiles = copyCatalogAssets(
+  resolve(
+    root,
+    process.env.FITAPP_CATALOG_DIR ?? '.expo/catalog-05.2/published',
+  ),
+  resolve(staging, 'catalog'),
+);
+if (catalogFiles)
+  console.log(`Included ${catalogFiles} optional product catalog chunks.`);
 const build = generateServiceWorker(staging, {
   buildId,
 });

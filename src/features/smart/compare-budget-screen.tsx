@@ -10,6 +10,7 @@ import { SectionHeader } from '@/components/headers';
 import { addDays, formatNumber } from '@/features/calendar/calendar';
 import {
   dateKey,
+  isMassBased,
   parseDateKey,
   parseDecimal,
   portion,
@@ -249,6 +250,7 @@ export function CompareBudgetScreen({
       <ActionNotice message={action.message} dismiss={action.clear} />
       {picker ? (
         <ProductPicker
+          acceptProduct={isMassBased}
           onProduct={choose}
           selectedIds={selected.map((row) => row.product.id)}
         />
@@ -383,7 +385,11 @@ export function CompareBudgetScreen({
             disabled={disabled}
           />
           {session.products
-            .filter((product) => Object.hasOwn(pantry.prices, product.id))
+            .filter(
+              (product) =>
+                isMassBased(product) &&
+                Object.hasOwn(pantry.prices, product.id),
+            )
             .map((product) => {
               const price = pantry.prices[product.id];
               const costProtein = product.per100.protein

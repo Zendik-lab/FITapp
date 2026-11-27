@@ -30,7 +30,15 @@ export function RecipeNutrition({
   onChange(mode: NutritionMode): void;
   allowEstimatedPer100?: boolean;
 }) {
-  const values = nutrition?.[mode];
+  const options =
+    nutrition?.complete === false ||
+    (nutrition?.estimated && !allowEstimatedPer100)
+      ? modes.filter(({ value }) => value !== 'per100')
+      : modes;
+  const visibleMode = options.some(({ value }) => value === mode)
+    ? mode
+    : 'perServing';
+  const values = nutrition?.[visibleMode];
   return (
     <Card>
       <AppText variant="section">Пищевая ценность</AppText>
@@ -39,9 +47,11 @@ export function RecipeNutrition({
           animate
           values={values}
           caption={
-            mode === 'per100' && nutrition?.estimated
-              ? 'Приблизительно, по суммарной массе ингредиентов'
-              : undefined
+            nutrition?.complete === false
+              ? 'КБЖУ только для сопоставленных ингредиентов'
+              : visibleMode === 'per100' && nutrition?.estimated
+                ? 'Приблизительно, по суммарной массе ингредиентов'
+                : undefined
           }
         />
       ) : (
@@ -53,12 +63,8 @@ export function RecipeNutrition({
       <ChoiceGroup
         label="Режим расчёта"
         compact
-        value={mode}
-        options={
-          nutrition?.estimated && !allowEstimatedPer100
-            ? modes.filter(({ value }) => value !== 'per100')
-            : modes
-        }
+        value={visibleMode}
+        options={options}
         onChange={onChange}
       />
     </Card>

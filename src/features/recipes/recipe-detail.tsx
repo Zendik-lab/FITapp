@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
@@ -75,6 +75,7 @@ export function RecipeDetail({
     // Keep the input and show a correction hint below it.
   }
   const displayed = scaled ?? recipe;
+  const nutrition = calculateRecipe(displayed);
   const disabled = session?.pending || !!session?.failure;
   const builtin = isBuiltinRecipe(recipe.id);
   const favorite = session ? recipeIsFavorite(session.state, recipe) : false;
@@ -131,18 +132,31 @@ export function RecipeDetail({
       )}
       {!!recipe.description && <AppText>{recipe.description}</AppText>}
       <RecipeNutrition
-        nutrition={calculateRecipe(displayed)}
+        nutrition={nutrition}
         mode={mode}
         onChange={setMode}
         allowEstimatedPer100={!builtin}
       />
-      {!!recipe.metadata?.sources.length && (
+      {(!!recipe.metadata?.provenance || !!recipe.metadata?.sources.length) && (
         <AppText variant="caption" tone="muted">
           КБЖУ рассчитаны по составу и приблизительны.{' '}
           {[recipe.metadata.provenance, ...recipe.metadata.sources]
             .filter(Boolean)
             .join(' · ')}
         </AppText>
+      )}
+      {!!recipe.metadata?.sourceUrl && (
+        <PrimaryButton
+          secondary
+          label="Открыть источник рецепта"
+          onPress={() => {
+            const url = recipe.metadata?.sourceUrl;
+            if (url)
+              void Linking.openURL(url).catch(() =>
+                setError('Не удалось открыть источник рецепта.'),
+              );
+          }}
+        />
       )}
       <PrimaryButton
         secondary
@@ -227,6 +241,23 @@ export function RecipeDetail({
           />
         </Card>
       ))}
+      {displayed.metadata?.unresolvedIngredients?.map((item, index) => (
+        <Card key={index}>
+          <AppText variant="action">{item.name}</AppText>
+          <AppText tone="muted">
+            {item.quantity !== undefined
+              ? `${formatFoodQuantity(item.quantity)} ${item.unit}`
+              : item.sourceQuantity
+                ? `${item.sourceQuantity} ${item.unit}`
+                : item.unit === 'по вкусу'
+                  ? 'По вкусу'
+                  : 'Количество неизвестно'}
+          </AppText>
+          <AppText tone="muted" variant="caption">
+            КБЖУ неизвестны
+          </AppText>
+        </Card>
+      ))}
       {!!steps?.length && (
         <Card>
           <AppText variant="section">Инструкция</AppText>
@@ -253,11 +284,17 @@ export function RecipeDetail({
           })}
         </Card>
       )}
-      <PrimaryButton
-        label="Добавить в дневник"
-        disabled={disabled}
-        onPress={onAdd}
-      />
+      {nutrition.complete ? (
+        <PrimaryButton
+          label="Добавить в дневник"
+          disabled={disabled}
+          onPress={onAdd}
+        />
+      ) : (
+        <AppText tone="muted">
+          Для записи в дневник нужны КБЖУ всех ингредиентов.
+        </AppText>
+      )}
       {!builtin && (
         <PrimaryButton
           secondary
@@ -266,18 +303,20 @@ export function RecipeDetail({
           onPress={onEdit}
         />
       )}
-      <PrimaryButton
-        secondary
-        label={builtin ? 'Скопировать в мои рецепты' : 'Дублировать рецепт'}
-        disabled={disabled}
-        onPress={() => {
-          const copy = (duplicate.current ??= duplicateRecipe(recipe));
-          void commit(
-            (state) => saveRecipe(state, copy),
-            'Копия рецепта сохранена.',
-          );
-        }}
-      />
+      {nutrition.complete && (
+        <PrimaryButton
+          secondary
+          label={builtin ? 'Скопировать в мои рецепты' : 'Дублировать рецепт'}
+          disabled={disabled}
+          onPress={() => {
+            const copy = (duplicate.current ??= duplicateRecipe(recipe));
+            void commit(
+              (state) => saveRecipe(state, copy),
+              'Копия рецепта сохранена.',
+            );
+          }}
+        />
+      )}
       {!builtin && (
         <PrimaryButton
           secondary

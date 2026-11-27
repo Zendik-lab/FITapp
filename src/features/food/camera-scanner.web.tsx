@@ -6,6 +6,15 @@ import {
 import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { AppText } from '@/components/app-text';
 import type { CameraScannerProps } from './camera-scanner';
+import { normalizeScannedBarcode, type CameraBarcodeFormat } from './domain';
+
+const formats: Partial<Record<BarcodeFormat, CameraBarcodeFormat>> = {
+  [BarcodeFormat.EAN_13]: 'ean13',
+  [BarcodeFormat.EAN_8]: 'ean8',
+  [BarcodeFormat.UPC_A]: 'upc_a',
+  [BarcodeFormat.UPC_E]: 'upc_e',
+  [BarcodeFormat.ITF]: 'itf14',
+};
 
 export function CameraScanner({ onCode }: CameraScannerProps) {
   const video = useRef<HTMLVideoElement>(null);
@@ -23,8 +32,17 @@ export function CameraScanner({ onCode }: CameraScannerProps) {
       controls?.stop();
       stream?.getTracks().forEach((track) => track.stop());
     };
+    const timeout = setTimeout(() => {
+      if (!active || delivered) return;
+      active = false;
+      stop();
+      setFailure(
+        'Камера долго не отвечает. Откройте её снова или введите код вручную.',
+      );
+    }, 15000);
     const hidden = () => {
       if (document.visibilityState === 'hidden') {
+        clearTimeout(timeout);
         stop();
         if (active)
           setFailure(
@@ -53,6 +71,7 @@ export function CameraScanner({ onCode }: CameraScannerProps) {
         BarcodeFormat.EAN_8,
         BarcodeFormat.UPC_A,
         BarcodeFormat.UPC_E,
+        BarcodeFormat.ITF,
       ]);
       const reader = new BrowserMultiFormatReader(hints, {
         delayBetweenScanAttempts: 250,
@@ -62,25 +81,32 @@ export function CameraScanner({ onCode }: CameraScannerProps) {
         video.current,
         (result, _error, scan) => {
           if (active && !delivered && result) {
+            const format = formats[result.getBarcodeFormat()];
+            if (!format) return;
+            const code = normalizeScannedBarcode(result.getText(), format);
+            if (!code) return;
             delivered = true;
             scan.stop();
             stop();
-            callback.current(result.getText());
+            callback.current(code);
           }
         },
       );
       if (!active || delivered) stop();
-    })().catch((error: unknown) => {
-      stop();
-      if (active)
-        setFailure(
-          error instanceof DOMException && error.name === 'NotAllowedError'
-            ? 'Доступ к камере отклонён. Разрешите его в настройках Safari или введите код вручную.'
-            : 'Не удалось открыть камеру. Проверьте наличие камеры и разрешение или введите код вручную.',
-        );
-    });
+    })()
+      .catch((error: unknown) => {
+        stop();
+        if (active)
+          setFailure(
+            error instanceof DOMException && error.name === 'NotAllowedError'
+              ? 'Доступ к камере отклонён. Разрешите его в настройках Safari или введите код вручную.'
+              : 'Не удалось открыть камеру. Проверьте наличие камеры и разрешение или введите код вручную.',
+          );
+      })
+      .finally(() => clearTimeout(timeout));
     return () => {
       active = false;
+      clearTimeout(timeout);
       stop();
       document.removeEventListener('visibilitychange', hidden);
     };

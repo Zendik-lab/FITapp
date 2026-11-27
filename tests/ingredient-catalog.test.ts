@@ -7,13 +7,14 @@ import { categories } from '@/features/food/model';
 
 test('справочник содержит не менее 1871 разных записей USDA с устойчивыми ключами', () => {
   const sourced = builtinFoods.filter((food) => food.fdcId !== undefined);
-  expect(builtinFoodCatalogVersion).toBe(3);
+  const ingredients = builtinFoods.filter((food) => !food.barcode);
+  expect(builtinFoodCatalogVersion).toBe(4);
   expect(sourced.length).toBeGreaterThanOrEqual(1871);
   expect(new Set(builtinFoods.map(({ id }) => id)).size).toBe(
     builtinFoods.length,
   );
-  expect(new Set(builtinFoods.map(({ name }) => name)).size).toBe(
-    builtinFoods.length,
+  expect(new Set(ingredients.map(({ name }) => name)).size).toBe(
+    ingredients.length,
   );
   expect(new Set(sourced.map(({ fdcId }) => fdcId)).size).toBe(sourced.length);
   expect(
@@ -23,7 +24,7 @@ test('справочник содержит не менее 1871 разных з
     expect(id).toBe(`fdc-${fdcId}`);
     expect(source).toContain(`SR Legacy (04.2018), FDC ${fdcId}`);
   }
-  for (const food of builtinFoods) {
+  for (const food of ingredients) {
     const { calories, protein, fat, carbs } = food.per100;
     expect(categories).toContain(food.category);
     expect(food.aliases?.length).toBeGreaterThan(0);

@@ -1,6 +1,7 @@
 import {
   addNutrition,
   nutrientKeys,
+  portion,
   scaleNutrition,
 } from '@/features/food/domain';
 import { searchTerms, wordScore } from '@/features/food/local-search';
@@ -9,12 +10,11 @@ import type { NutritionTargets } from '@/features/nutrition/engine';
 import type { UserProfile } from '@/features/profile/model';
 import type { IndexedRecipe } from '@/features/recipes/recipe-search';
 
-export type MealPart = {
+type MealPart = {
   id: string;
   name: string;
   amount: number;
-  kind: 'recipe' | 'product';
-};
+} & ({ kind: 'recipe' } | { kind: 'product'; unit: 'g' | 'ml' });
 export interface MealSuggestion {
   parts: MealPart[];
   values: NutritionTargets;
@@ -161,9 +161,12 @@ export function suggestMeals(
         ) * 5,
       ),
     );
-    const values = scaleNutrition(product.per100, amount / 100);
+    const unit = product.baseUnit ?? 'g';
+    const values = portion(product, amount, unit);
     productOptions.push({
-      parts: [{ id: product.id, name: product.name, amount, kind: 'product' }],
+      parts: [
+        { id: product.id, name: product.name, amount, kind: 'product', unit },
+      ],
       values,
       score:
         rank(values) -

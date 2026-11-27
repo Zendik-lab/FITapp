@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
-import { FormDisabledContext, FormField } from '@/components/form-controls';
+import {
+  ChoiceGroup,
+  FormDisabledContext,
+  FormField,
+} from '@/components/form-controls';
 import { describeError } from '@/database/storage-diagnostics';
+import { findCatalogBarcode } from '@/features/catalog/catalog-service';
+import { lookupBarcode } from './barcode-lookup';
 import { CameraScanner } from './camera-scanner';
+import { builtinFoods } from './catalog';
 import { FoodForm } from './food-form';
 import { useFoodDiary } from './food-context';
-import { sameBarcode, validBarcode } from './domain';
+import { normalizeScannedBarcode } from './domain';
 import { offClient } from './off-api';
-import { saveProduct } from './operations';
 import type { FoodProduct } from './model';
 
 export function ScannerScreen({
@@ -19,7 +25,7 @@ export function ScannerScreen({
   onCreate,
 }: {
   onBack(): void;
-  onProduct(p: FoodProduct): void;
+  onProduct(p: FoodProduct, offlineSaved: boolean): void;
   onCreate(code: string): void;
 }) {
   const session = useFoodDiary();
@@ -29,6 +35,10 @@ export function ScannerScreen({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [missing, setMissing] = useState(false);
+  const [shortFormat, setShortFormat] = useState<'ean8' | 'upc_e'>('ean8');
+  const ambiguous =
+    normalizeScannedBarcode(code, 'ean8') &&
+    normalizeScannedBarcode(code, 'upc_e');
   const request = useRef<AbortController | null>(null);
   const guard = useRef(false);
   useFocusEffect(
@@ -50,36 +60,41 @@ export function ScannerScreen({
       request.current?.abort();
     };
   }, []);
-  async function lookup(value: string) {
+  async function lookup(value: string, format?: 'ean8' | 'upc_e') {
     if (guard.current) return;
-    setCode(value);
+    const normalized = normalizeScannedBarcode(value, format);
+    setCode(normalized ?? value.trim());
     setMessage('');
     setMissing(false);
     setCamera(false);
-    if (!validBarcode(value)) {
-      setMessage('Некорректный штрихкод. Проверьте цифры и длину EAN/UPC.');
+    if (!normalized) {
+      setMessage('Некорректный штрихкод. Проверьте длину и контрольную цифру.');
       return;
     }
-    const local = session?.products.find((p) => sameBarcode(p.barcode, value));
-    if (local) {
-      onProduct(local);
-      return;
-    }
-    if (!session) return;
+    if (!session || session.loading) return;
     guard.current = true;
     setBusy(true);
     const controller = new AbortController();
     request.current = controller;
+    const online = Platform.OS !== 'web' || navigator.onLine !== false;
     try {
-      const product = await offClient.barcode(value, controller.signal);
+      const result = await lookupBarcode(normalized, {
+        builtins: builtinFoods,
+        session,
+        online,
+        signal: controller.signal,
+        findPack: findCatalogBarcode,
+        remote: offClient.barcode,
+      });
       if (controller.signal.aborted) return;
-      if (product) {
-        await session.change((s) => saveProduct(s, product));
-        if (!controller.signal.aborted) onProduct(product);
+      if (result) {
+        onProduct(result.product, result.saved);
       } else {
         setMissing(true);
         setMessage(
-          'В Open Food Facts нет продукта с таким штрихкодом. Можно создать его по этикетке.',
+          online
+            ? 'Товар с этим штрихкодом не найден в каталогах и Open Food Facts.'
+            : 'Товар с этим штрихкодом не найден офлайн. Онлайн-поиск доступен при подключении.',
         );
       }
     } catch (error) {
@@ -88,6 +103,7 @@ export function ScannerScreen({
         setMessage(describeError(error));
       }
     } finally {
+      request.current = null;
       guard.current = false;
       setBusy(false);
     }
@@ -95,16 +111,23 @@ export function ScannerScreen({
   return (
     <FoodForm title="Штрихкод продукта" onBack={onBack}>
       <AppText tone="muted">
-        EAN-13, EAN-8, UPC-A и UPC-E. Камера работает после вашего разрешения;
-        ручной ввод доступен всегда.
+        EAN-13, EAN-8, UPC-A, UPC-E и GTIN-14. Штрихкод можно считать камерой
+        или ввести вручную.
       </AppText>
       {camera && active ? (
-        <CameraScanner onCode={(value) => void lookup(value)} />
+        <>
+          <CameraScanner onCode={(value) => void lookup(value)} />
+          <PrimaryButton
+            secondary
+            label="Закрыть камеру"
+            onPress={() => setCamera(false)}
+          />
+        </>
       ) : (
         <PrimaryButton
           secondary
           label="Открыть камеру"
-          disabled={busy}
+          disabled={busy || session?.loading}
           onPress={() => setCamera(true)}
         />
       )}
@@ -116,25 +139,40 @@ export function ScannerScreen({
           value={code}
           onChangeText={(v) => {
             setCode(v);
+            setShortFormat('ean8');
             setMissing(false);
             setMessage('');
           }}
         />
+        {!!ambiguous && (
+          <ChoiceGroup
+            label="Формат штрихкода"
+            value={shortFormat}
+            onChange={setShortFormat}
+            options={[
+              { value: 'ean8', label: 'EAN-8' },
+              { value: 'upc_e', label: 'UPC-E' },
+            ]}
+          />
+        )}
       </FormDisabledContext>
       <PrimaryButton
         label={busy ? 'Поиск продукта…' : 'Найти по штрихкоду'}
-        disabled={busy || !code}
-        onPress={() => void lookup(code.trim())}
+        disabled={busy || session?.loading || !code}
+        onPress={() => void lookup(code, ambiguous ? shortFormat : undefined)}
       />
       {!!message && (
         <AppText accessibilityLiveRegion="polite">{message}</AppText>
       )}
       {missing && (
-        <PrimaryButton
-          secondary
-          label="Создать с этим штрихкодом"
-          onPress={() => onCreate(code)}
-        />
+        <>
+          <PrimaryButton secondary label="Найти по названию" onPress={onBack} />
+          <PrimaryButton
+            secondary
+            label="Создать с этим штрихкодом"
+            onPress={() => onCreate(code)}
+          />
+        </>
       )}
     </FoodForm>
   );

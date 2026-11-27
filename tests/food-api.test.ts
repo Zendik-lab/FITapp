@@ -22,7 +22,6 @@ test('OFF проверяет неизвестный JSON и не подстав�
     }),
   ).toBeNull();
   expect(parseOffProduct(null)).toBeNull();
-  expect(parseOffProduct({ ...raw, nutrition_data_per: '100ml' })).toBeNull();
   expect(
     parseOffProduct({
       ...raw,
@@ -40,14 +39,57 @@ test('OFF проверяет неизвестный JSON и не подстав�
   ).toBeNull();
   expect(parseOffProduct({ ...raw, no_nutrition_data: 'on' })).toBeNull();
 });
+
+test('OFF сохраняет подтверждённую основу на 100 мл и только присутствующие метаданные', () => {
+  expect(
+    parseOffProduct({
+      ...raw,
+      product_name_ru: 'Напиток',
+      nutrition_data_per: '100ml',
+      serving_size: '250 мл',
+      quantity: '1 L',
+      countries_tags: ['en:kazakhstan'],
+      allergens: 'en:milk',
+      nutriments: { ...raw.nutriments, sugars_100g: 0 },
+    }),
+  ).toMatchObject({
+    baseUnit: 'ml',
+    servingMl: 250,
+    catalogDetails: {
+      russianName: 'Напиток',
+      originalName: raw.product_name,
+      packageAmount: 1000,
+      packageUnit: 'ml',
+      countries: ['kazakhstan'],
+      allergens: 'en:milk',
+      sugar: 0,
+    },
+  });
+  expect(
+    parseOffProduct({ ...raw, nutrition_data_per: '100ml' })?.catalogDetails
+      ?.fiber,
+  ).toBeUndefined();
+  expect(
+    parseOffProduct({
+      ...raw,
+      nutrition_data_per: '100ml',
+      nutriments: { ...raw.nutriments, proteins_100g: 500 },
+    }),
+  ).toBeNull();
+});
 test('поиск, штрихкод, сеть и ограничение частоты', async () => {
   const request = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ products: [raw, {}], product: raw, status: 1 }),
+    json: async () => ({
+      hits: [{ ...raw, brands: ['xx:Snickers'] }, {}],
+      product: raw,
+      status: 1,
+    }),
   });
   const client = createOffClient(request);
   const result = await client.search('Тест');
   expect(result.products).toHaveLength(1);
+  expect(result.products[0].brand).toBe('Snickers');
   expect(result.incomplete).toBe(1);
   await expect(client.search('Другой')).rejects.toThrow(/Подождите/);
   expect((await client.barcode(raw.code))?.name).toBe('Продукт');
@@ -160,7 +202,7 @@ test('поиск кодирует имя продукта, а неверная �
   const request = jest.fn().mockResolvedValue({
     ok: true,
     status: 200,
-    json: async () => ({ products: [] }),
+    json: async () => ({ hits: [] }),
   });
   const client = createOffClient(request);
   await expect(client.barcode('4006381333932')).rejects.toMatchObject({
@@ -173,9 +215,9 @@ test('поиск кодирует имя продукта, а неверная �
   });
   const url = new URL(request.mock.calls[0][0]);
   expect(url.origin + url.pathname).toBe(
-    'https://world.openfoodfacts.org/cgi/search.pl',
+    'https://search.openfoodfacts.org/search',
   );
-  expect(url.searchParams.get('search_terms')).toBe('Чай & мёд');
+  expect(url.searchParams.get('q')).toBe('Чай & мёд');
 });
 
 test('поиск принимает номер UPC-A с ведущим нулём, добавленным сервисом', async () => {

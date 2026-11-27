@@ -31,15 +31,36 @@ export const categories = [
   'Специи и добавки',
   'Соусы и заправки',
 ] as const;
+export interface FoodCatalogDetails {
+  originalName?: string;
+  russianName?: string;
+  manufacturer?: string;
+  sourceCategory?: string;
+  ingredients?: string;
+  allergens?: string;
+  countries?: readonly string[];
+  packageText?: string;
+  packageAmount?: number;
+  packageUnit?: 'g' | 'ml';
+  sugar?: number;
+  fiber?: number;
+  saturatedFat?: number;
+  salt?: number;
+  completeness?: 'macros' | 'extended';
+  url?: string;
+  license?: string;
+}
 export interface FoodProduct {
   id: string;
   name: string;
   category: string;
   brand?: string;
   barcode?: string;
+  barcodes?: readonly string[];
   per100: NutritionTargets;
   aliases?: readonly string[];
-  baseUnit?: 'g';
+  baseUnit?: 'g' | 'ml';
+  catalogDetails?: FoodCatalogDetails;
   approximate?: boolean;
   fdcId?: number;
   source: string;
@@ -50,6 +71,7 @@ export interface FoodProduct {
   gramsPerMl?: number;
   pieceGrams?: number;
   servingGrams?: number;
+  servingMl?: number;
 }
 interface EntryBase {
   id: string;
@@ -62,7 +84,8 @@ interface EntryBase {
 export type ProductDiaryEntry = EntryBase & {
   product: FoodProduct;
   unit: FoodUnit;
-  grams: number;
+  grams: number | null;
+  milliliters?: number;
   recipe?: undefined;
 };
 export type RecipeDiaryEntry = EntryBase & {

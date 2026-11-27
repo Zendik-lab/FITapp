@@ -175,6 +175,36 @@ test('Smart Meal includes real catalog values and stops for unverified allergies
   ).toEqual([]);
 });
 
+test('Smart Meal keeps the milliliter basis when recommending a dairy product', () => {
+  const drink = {
+    ...product,
+    id: 'milk',
+    name: 'Молоко',
+    category: 'Молочные продукты',
+    baseUnit: 'ml' as const,
+  };
+  const [suggestion] = suggestMeals(
+    { calories: 800, protein: 40, fat: 25, carbs: 100 },
+    [],
+    [drink],
+    emptyFoodState(),
+    {
+      mealsPerDay: null,
+      diet: '',
+      excludedFoods: '',
+      allergies: '',
+      restrictions: '',
+    },
+    'gain',
+    8,
+  );
+  expect(suggestion.parts[0]).toMatchObject({
+    id: drink.id,
+    kind: 'product',
+    unit: 'ml',
+  });
+});
+
 test('personalization preserves a custom order and validates typed fields', () => {
   const initial = JSON.stringify(defaultPersonalization);
   expect(JSON.stringify(decodePersonalization(initial))).toBe(initial);

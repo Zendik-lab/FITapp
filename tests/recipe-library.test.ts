@@ -1,15 +1,23 @@
 /** @jest-environment node */
 import { IDBFactory } from 'fake-indexeddb';
+import { readFileSync } from 'node:fs';
 import { createFoodRepository } from '@/database/repositories/food';
 import { openIndexedDbSettings } from '@/database/settings-storage.web';
 import { builtinFoods } from '@/features/food/catalog';
 import { emptyFoodState } from '@/features/food/model';
 import { calculateRecipe, scaleRecipe } from '@/features/recipes/domain';
+import { recipeExpansion } from '@/features/recipes/library-expansion-manifest';
 import {
   builtinRecipeIds,
   builtinRecipeSearchInputs,
   getBuiltinRecipe,
+  setRecipeExpansion,
 } from '@/features/recipes/library';
+import {
+  installRecipePack,
+  readRecipePack,
+  removeRecipePack,
+} from '@/features/recipes/recipe-pack';
 import {
   addRecipeEntry,
   duplicateRecipe,
@@ -108,6 +116,72 @@ test('search ranks titles, combines ingredient terms and respects exclusions and
   );
   expect(pantryMatch(sample, new Set(ids), false).percent).toBe(100);
   expect(findRecipes(index, { pantry: ids })[0].match?.missing).toBe(0);
+});
+
+test('recipes with an unresolved ingredient keep its quantity without entering nutrition filters or the diary', () => {
+  const original = builtinRecipes[0];
+  const recipe = {
+    ...original,
+    id: 'unresolved-recipe',
+    metadata: {
+      steps: [],
+      tags: [],
+      sources: [],
+      unresolvedIngredients: [
+        { name: 'Масло для фритюра', quantity: 500, unit: 'мл' },
+      ],
+    },
+  };
+  const scaled = scaleRecipe(recipe, recipe.servings * 2);
+  expect(scaled.metadata?.unresolvedIngredients?.[0].quantity).toBe(1000);
+  expect(calculateRecipe(recipe).complete).toBe(false);
+  const index = buildRecipeIndex([recipe], builtinFoods, emptyFoodState());
+  expect(findRecipes(index, { query: 'фритюр' })).toHaveLength(1);
+  expect(findRecipes(index, { maxCalories: 10000 })).toEqual([]);
+  expect(findRecipes(index, { query: 'без масло' })).toEqual([]);
+  expect(pantryMatch(index[0], index[0].ingredientIds, false).missing).toBe(1);
+  expect(() =>
+    addRecipeEntry(
+      { ...emptyFoodState(), recipes: [recipe] },
+      recipe.id,
+      1,
+      'serving',
+      'lunch',
+      '2026-11-27',
+      'new-entry',
+    ),
+  ).toThrow(/КБЖУ/);
+});
+
+test('installs the real optional recipe pack atomically, reopens offline and removes only pack data', async () => {
+  const factory = new IDBFactory();
+  const storage = await openIndexedDbSettings(factory);
+  const bytes = new Uint8Array(
+    readFileSync(`public/catalog/${recipeExpansion.path}`),
+  );
+  await storage.apply([{ key: 'profile', value: 'preserve' }]);
+  await expect(
+    installRecipePack(storage, async () => bytes.subarray(1)),
+  ).rejects.toThrow(/повреждён/);
+  expect(await readRecipePack(storage)).toBeNull();
+
+  const installed = await installRecipePack(storage, async () => bytes);
+  expect(installed.rows).toHaveLength(recipeExpansion.count);
+  const reopened = await openIndexedDbSettings(factory);
+  const restored = await readRecipePack(reopened);
+  expect(restored?.version).toBe(recipeExpansion.version);
+  try {
+    setRecipeExpansion(restored?.rows);
+    const beshbarmak = getBuiltinRecipe('library:unitools-beshbarmak');
+    expect(beshbarmak?.metadata?.cuisine).toBe('Казахская кухня');
+    expect(beshbarmak?.metadata?.unresolvedIngredients?.[0].quantity).toBe(1.5);
+    expect(builtinRecipeIds).not.toContain('library:unitools-beshbarmak');
+  } finally {
+    setRecipeExpansion();
+  }
+  await removeRecipePack(reopened);
+  expect(await readRecipePack(storage)).toBeNull();
+  expect(await storage.get('profile')).toBe('preserve');
 });
 
 test('measures card indexing, search and filters with 50,000 fixture records', () => {

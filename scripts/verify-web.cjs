@@ -2,6 +2,7 @@ const { createHash } = require('node:crypto');
 const { Buffer } = require('node:buffer');
 const { readFile } = require('node:fs/promises');
 const { resolve, sep, extname } = require('node:path');
+const { verifyCatalogAssets } = require('./catalog-assets.cjs');
 
 const routes = ['/nutrition', '/workouts', '/progress', '/profile'];
 const mimeTypes = {
@@ -107,6 +108,7 @@ async function verifyWebBuild(target = 'dist') {
   for (const required of ['/', '/manifest.webmanifest'])
     if (!paths.has(required))
       throw new Error(`Missing build file: ${required}`);
+  await verifyCatalogAssets(paths, load);
   const html = (await load('/')).toString();
   if (
     !html.includes(`<meta name="app-build" content="${info.buildId}">`) ||

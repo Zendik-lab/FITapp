@@ -6,7 +6,12 @@ import { Card } from '@/components/card';
 import { ChoiceGroup, FormField } from '@/components/form-controls';
 import { SectionHeader } from '@/components/headers';
 import { formatNumber } from '@/features/calendar/calendar';
-import { gramsFor, parseDecimal, unitsFor } from '@/features/food/domain';
+import {
+  gramsFor,
+  isMassBased,
+  parseDecimal,
+  unitsFor,
+} from '@/features/food/domain';
 import type { FoodSession } from '@/features/food/food-context';
 import { FoodForm } from '@/features/food/food-form';
 import {
@@ -263,6 +268,7 @@ export function PantryScreen({
         </>
       ) : picker ? (
         <ProductPicker
+          acceptProduct={isMassBased}
           onProduct={(product) =>
             open(
               mode === 'fridge'
@@ -426,7 +432,10 @@ export function PantryScreen({
                       open(
                         item,
                         undefined,
-                        products.find((product) => product.id === item.id),
+                        products.find(
+                          (product) =>
+                            product.id === item.id && isMassBased(product),
+                        ),
                       )
                     }
                   />

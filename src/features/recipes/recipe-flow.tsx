@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDebouncedSearch } from '@/features/food/use-debounced-search';
 import {
   ActivityIndicator,
@@ -11,7 +11,9 @@ import { ScreenStack } from '@/components/screen-stack';
 import { IconButton, PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
 import { ChoiceGroup } from '@/components/form-controls';
+import { getSettingsStorage } from '@/database/settings-storage';
 import { describeError } from '@/database/storage-diagnostics';
+import { formatNumber } from '@/features/calendar/calendar';
 import { useFoodDiary } from '@/features/food/food-context';
 import { parseDecimal, sumEntries } from '@/features/food/domain';
 import { FoodForm } from '@/features/food/food-form';
@@ -25,7 +27,10 @@ import {
   builtinRecipeCuisines,
   builtinRecipeSearchInputs,
   getBuiltinRecipe,
+  recipeCuisines,
+  setRecipeExpansion,
 } from './library';
+import { recipeExpansion } from './library-expansion-manifest';
 import type { Recipe } from './model';
 import { rememberRecipeQuery, setRecipeFavorite } from './operations';
 import { SearchField } from './recipe-controls';
@@ -44,6 +49,7 @@ import {
 } from './recipe-library-controls';
 import {
   buildRecipeIndex,
+  collections,
   findRecipes,
   numericFilters,
   recommendations,
@@ -105,11 +111,39 @@ export function RecipeFlow({
   const [filters, setFilters] = useState<RecipeFilters>({});
   const [draft, setDraft] = useState<NumericDraft>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [expansionVersion, setExpansionVersion] = useState<string>();
+  const [checkingExpansion, setCheckingExpansion] = useState(!choose);
+  const [expansionProgress, setExpansionProgress] = useState<number | null>(
+    null,
+  );
   const [pantry, setPantry] = useState<readonly string[] | null>(null);
   const [ignoreBasics, setIgnoreBasics] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const expanded = expansionVersion !== undefined;
+  useEffect(() => {
+    if (choose) return;
+    let active = true;
+    void getSettingsStorage()
+      .then(async (storage) =>
+        (await import('./recipe-pack')).readRecipePack(storage),
+      )
+      .then((pack) => {
+        if (!active) return;
+        setRecipeExpansion(pack?.rows);
+        setExpansionVersion(pack?.version);
+      })
+      .catch((cause: unknown) => {
+        if (active) setError(describeError(cause));
+      })
+      .finally(() => {
+        if (active) setCheckingExpansion(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [choose]);
   const state = session?.state ?? empty;
   const products = session?.products ?? noProducts;
   const { recipes, entries, favoriteRecipeIds } = state;
@@ -118,12 +152,16 @@ export function RecipeFlow({
       buildRecipeIndex(
         (function* () {
           yield* recipes;
-          yield* builtinRecipeSearchInputs();
+          yield* builtinRecipeSearchInputs(expanded);
         })(),
         products,
         { entries, favoriteRecipeIds },
       ),
-    [products, recipes, entries, favoriteRecipeIds],
+    [products, recipes, entries, favoriteRecipeIds, expanded],
+  );
+  const cuisines = useMemo(
+    () => (expanded ? recipeCuisines(true) : builtinRecipeCuisines),
+    [expanded],
   );
   const remaining = useMemo(() => {
     if (!goals) return undefined;
@@ -187,6 +225,44 @@ export function RecipeFlow({
   function setSearch(value: string) {
     setQuery(value.slice(0, 120));
     setPageIndex(0);
+  }
+  async function changeExpansion(remove = false) {
+    if (checkingExpansion || expansionProgress !== null) return;
+    setError('');
+    setCheckingExpansion(true);
+    try {
+      const { installRecipePack, removeRecipePack } =
+        await import('./recipe-pack');
+      const storage = await getSettingsStorage();
+      if (remove) {
+        await removeRecipePack(storage);
+        setRecipeExpansion();
+        setExpansionVersion(undefined);
+        setFilterValues({
+          ...filters,
+          cuisines: filters.cuisines?.filter((cuisine) =>
+            builtinRecipeCuisines.includes(cuisine),
+          ),
+        });
+        setNotice('Пакет рецептов удалён.');
+      } else {
+        setExpansionProgress(0);
+        const pack = await installRecipePack(
+          storage,
+          undefined,
+          setExpansionProgress,
+        );
+        setRecipeExpansion(pack.rows);
+        setExpansionVersion(pack.version);
+        setPageIndex(0);
+        setNotice('Пакет рецептов доступен офлайн.');
+      }
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setCheckingExpansion(false);
+      setExpansionProgress(null);
+    }
   }
   function setIngredient(target: IngredientFilter, id: string) {
     if (target === 'pantry')
@@ -426,7 +502,7 @@ export function RecipeFlow({
         {filtersOpen && (
           <FilterPanel
             filters={filters}
-            cuisines={builtinRecipeCuisines}
+            cuisines={cuisines}
             draft={draft}
             onDraft={setDraft}
             onChange={setFilterValues}
@@ -477,6 +553,8 @@ export function RecipeFlow({
           expanded={pantry !== null}
           onPress={() => {
             setPantry(pantry === null ? [] : null);
+            if (pantry !== null && filters.pantryOnly)
+              setFilterValues({ ...filters, pantryOnly: undefined });
             setPageIndex(0);
           }}
         />
@@ -487,6 +565,16 @@ export function RecipeFlow({
               проверяется.
             </AppText>
             <View style={styles.row}>
+              <ToggleChip
+                label="Из доступных ингредиентов"
+                active={!!filters.pantryOnly}
+                onPress={() =>
+                  setFilterValues({
+                    ...filters,
+                    pantryOnly: !filters.pantryOnly,
+                  })
+                }
+              />
               <ToggleChip
                 label="Не учитывать воду, соль и чёрный перец"
                 active={ignoreBasics}
@@ -520,6 +608,19 @@ export function RecipeFlow({
               Подборки
             </AppText>
             <View style={styles.row}>
+              {collections.slice(0, 5).map((tag) => (
+                <ToggleChip
+                  key={tag}
+                  label={tag}
+                  active={filters.tags?.includes(tag) ?? false}
+                  onPress={() =>
+                    setFilterValues({
+                      ...filters,
+                      tags: toggleValue(filters.tags ?? [], tag),
+                    })
+                  }
+                />
+              ))}
               {recommendations
                 .filter(
                   (value, index) =>
@@ -545,6 +646,42 @@ export function RecipeFlow({
                 ))}
             </View>
           </View>
+        )}
+        {!choose && (
+          <Card>
+            <AppText variant="action">Расширенная библиотека</AppText>
+            <AppText
+              variant="caption"
+              tone="muted"
+              accessibilityLiveRegion="polite"
+            >
+              {expansionProgress !== null
+                ? `Загрузка · ${expansionProgress}%`
+                : expanded
+                  ? 'Пакет доступен офлайн'
+                  : `${formatNumber(recipeExpansion.count)} рецептов с неполными КБЖУ · ${formatNumber(Math.ceil(recipeExpansion.bytes / 1024))} КБ`}
+            </AppText>
+            {expansionVersion !== recipeExpansion.version && (
+              <PrimaryButton
+                secondary
+                label={
+                  expanded
+                    ? 'Обновить пакет рецептов'
+                    : 'Скачать пакет рецептов'
+                }
+                disabled={checkingExpansion}
+                onPress={() => void changeExpansion()}
+              />
+            )}
+            {expanded && (
+              <PrimaryButton
+                secondary
+                label="Удалить пакет рецептов"
+                disabled={checkingExpansion}
+                onPress={() => void changeExpansion(true)}
+              />
+            )}
+          </Card>
         )}
         {session?.loading ? (
           <ActivityIndicator accessibilityLabel="Загрузка рецептов" />
@@ -587,81 +724,96 @@ export function RecipeFlow({
         <View style={styles.grid}>
           {visible
             .slice(start, start + pageSize)
-            .map(({ recipe, nutrition, time, favorite, match }, index) => {
-              const title = match ? pantryTitle(match.missing) : undefined;
-              const previous = index
-                ? visible[start + index - 1]?.match
-                : undefined;
-              const groupStarts =
-                title && (!previous || title !== pantryTitle(previous.missing));
-              return (
-                <RecipeGridItem
-                  key={recipe.id}
-                  group={groupStarts ? title : undefined}
-                  columns={width >= 540 ? 2 : 1}
-                >
-                  <Card style={styles.card}>
-                    <RecipeArtwork category={recipe.category} />
-                    <View style={styles.heading}>
-                      <View style={styles.title}>
-                        <AppText variant="action">{recipe.name}</AppText>
-                        <AppText variant="caption" tone="muted">
-                          {recipe.category}
-                          {time !== undefined ? ' · ' + time + ' мин' : ''}
-                        </AppText>
-                      </View>
-                      <IconButton
-                        icon={favorite ? 'Check' : 'Heart'}
-                        compact
-                        label={
-                          (favorite
-                            ? 'Убрать из избранного: '
-                            : 'В избранное: ') + recipe.name
-                        }
-                        disabled={disabled}
-                        onPress={() => {
-                          const original = resolveRecipe(recipe.id);
-                          if (original)
-                            void change((current) =>
-                              setRecipeFavorite(current, original, !favorite),
-                            );
-                        }}
-                      />
-                    </View>
-                    <NutritionValues
-                      caption="На одну порцию"
-                      values={nutrition}
-                    />
-                    {match && (
-                      <AppText variant="caption" tone="muted">
-                        Есть {match.matched} из {match.total} · {match.percent}%
-                      </AppText>
-                    )}
-                    <View style={styles.heading}>
-                      <View style={styles.title}>
-                        <PrimaryButton
-                          secondary
-                          label={'Открыть: ' + recipe.name}
+            .map(
+              (
+                { recipe, nutrition, nutritionComplete, time, favorite, match },
+                index,
+              ) => {
+                const title = match ? pantryTitle(match.missing) : undefined;
+                const previous = index
+                  ? visible[start + index - 1]?.match
+                  : undefined;
+                const groupStarts =
+                  title &&
+                  (!previous || title !== pantryTitle(previous.missing));
+                return (
+                  <RecipeGridItem
+                    key={recipe.id}
+                    group={groupStarts ? title : undefined}
+                    columns={width >= 540 ? 2 : 1}
+                  >
+                    <Card style={styles.card}>
+                      <RecipeArtwork category={recipe.category} />
+                      <View style={styles.heading}>
+                        <View style={styles.title}>
+                          <AppText variant="action">{recipe.name}</AppText>
+                          <AppText variant="caption" tone="muted">
+                            {recipe.category}
+                            {time !== undefined ? ' · ' + time + ' мин' : ''}
+                          </AppText>
+                        </View>
+                        <IconButton
+                          icon={favorite ? 'Check' : 'Heart'}
+                          compact
+                          label={
+                            (favorite
+                              ? 'Убрать из избранного: '
+                              : 'В избранное: ') + recipe.name
+                          }
+                          disabled={disabled}
                           onPress={() => {
-                            open(recipe);
-                            remember(query);
+                            const original = resolveRecipe(recipe.id);
+                            if (original)
+                              void change((current) =>
+                                setRecipeFavorite(current, original, !favorite),
+                              );
                           }}
                         />
                       </View>
-                      <IconButton
-                        icon="Plus"
-                        label={'Добавить в дневник: ' + recipe.name}
-                        disabled={disabled}
-                        onPress={() => {
-                          const original = resolveRecipe(recipe.id);
-                          if (original) setPage({ kind: 'log', original });
-                        }}
-                      />
-                    </View>
-                  </Card>
-                </RecipeGridItem>
-              );
-            })}
+                      {nutritionComplete ? (
+                        <NutritionValues
+                          caption="На одну порцию"
+                          values={nutrition}
+                        />
+                      ) : (
+                        <AppText variant="caption" tone="muted">
+                          КБЖУ рассчитаны частично
+                        </AppText>
+                      )}
+                      {match && (
+                        <AppText variant="caption" tone="muted">
+                          Есть {match.matched} из {match.total} ·{' '}
+                          {match.percent}%
+                        </AppText>
+                      )}
+                      <View style={styles.heading}>
+                        <View style={styles.title}>
+                          <PrimaryButton
+                            secondary
+                            label={'Открыть: ' + recipe.name}
+                            onPress={() => {
+                              open(recipe);
+                              remember(query);
+                            }}
+                          />
+                        </View>
+                        {nutritionComplete && (
+                          <IconButton
+                            icon="Plus"
+                            label={'Добавить в дневник: ' + recipe.name}
+                            disabled={disabled}
+                            onPress={() => {
+                              const original = resolveRecipe(recipe.id);
+                              if (original) setPage({ kind: 'log', original });
+                            }}
+                          />
+                        )}
+                      </View>
+                    </Card>
+                  </RecipeGridItem>
+                );
+              },
+            )}
         </View>
       </FoodForm>
     </ScreenStack>

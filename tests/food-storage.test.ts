@@ -15,6 +15,34 @@ import { builtinFoods } from '@/features/food/catalog';
 import { makeEntry, sumEntries } from '@/features/food/domain';
 import { emptyFoodState } from '@/features/food/model';
 
+test('сохранённый по штрихкоду напиток и его порция переживают перезапуск', async () => {
+  const factory = new IDBFactory();
+  const repo = createFoodRepository(await openIndexedDbSettings(factory));
+  const product = {
+    ...builtinFoods[0],
+    id: 'off-4006381333931',
+    barcode: '4006381333931',
+    baseUnit: 'ml' as const,
+    servingMl: 250,
+    gramsPerMl: undefined,
+    catalogDetails: { countries: ['en:kazakhstan'], sugar: 0 },
+  };
+  await repo.change((s) => saveProduct(s, product));
+  await repo.change((s) =>
+    addEntry(s, makeEntry(product, 0.5, 'serving', 'snack', '2026-11-26')),
+  );
+  const reopened = createFoodRepository(await openIndexedDbSettings(factory));
+  const state = await reopened.load();
+  expect(state.products[0]).toMatchObject({
+    barcode: product.barcode,
+    catalogDetails: product.catalogDetails,
+  });
+  expect(state.entries[0]).toMatchObject({ grams: null, milliliters: 125 });
+  expect(sumEntries(state.entries, '2026-11-26').calories).toBe(
+    product.per100.calories * 1.25,
+  );
+});
+
 test('CRUD, перенос, копии, снимки, избранное и недавние переживают повторное открытие', async () => {
   const factory = new IDBFactory();
   const storage = await openIndexedDbSettings(factory);

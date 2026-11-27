@@ -47,6 +47,7 @@ export const numericFilters = [
   { key: 'minCalories', label: 'Калории от, ккал' },
   { key: 'maxCalories', label: 'Калории до, ккал' },
   { key: 'minProtein', label: 'Белки от, г' },
+  { key: 'maxProtein', label: 'Белки до, г' },
   { key: 'minFat', label: 'Жиры от, г' },
   { key: 'maxFat', label: 'Жиры до, г' },
   { key: 'minCarbs', label: 'Углеводы от, г' },
@@ -70,6 +71,7 @@ export interface RecipeFilters extends Partial<Record<NumericFilter, number>> {
   required?: readonly string[];
   excluded?: readonly string[];
   pantry?: readonly string[];
+  pantryOnly?: boolean;
   ignoreBasics?: boolean;
   recommendation?: Recommendation;
   remaining?: Pick<NutritionTargets, 'calories' | 'protein'>;
@@ -110,7 +112,9 @@ export interface IndexedRecipe {
   tags: Set<string>;
   ingredientIds: Set<string>;
   basicIds: Set<string>;
+  unresolvedIngredientCount: number;
   nutrition: NutritionTargets;
+  nutritionComplete: boolean;
   time?: number;
   favorite: boolean;
   builtin: boolean;
@@ -135,7 +139,7 @@ type RecipeIndexInput = RecipeCard &
     | 'isFavorite'
   > & {
     metadata?: RecipeCard['metadata'] &
-      Pick<NonNullable<Recipe['metadata']>, 'tags'>;
+      Pick<NonNullable<Recipe['metadata']>, 'tags' | 'unresolvedIngredients'>;
     searchNames?: readonly string[];
   };
 const nameCollator = new Intl.Collator('ru');
@@ -197,17 +201,22 @@ export function buildRecipeIndex(
     });
   }
   return Array.from(recipes, (recipe) => {
-    const nutrition = calculateRecipe(recipe).perServing;
+    const unresolved = recipe.metadata?.unresolvedIngredients ?? [];
+    const calculation = calculateRecipe(recipe);
+    const nutrition = calculation.perServing;
     const time = recipeTime(recipe);
     const tags = new Set(recipe.metadata?.tags);
     const ingredientIds = new Set(
       recipe.ingredients.map((item) => item.productId),
     );
-    if (nutrition.protein >= 25) tags.add('Высокобелковые');
-    if (nutrition.calories >= 550) tags.add('Высококалорийные');
+    if (calculation.complete && nutrition.protein >= 25)
+      tags.add('Высокобелковые');
+    if (calculation.complete && nutrition.calories >= 550)
+      tags.add('Высококалорийные');
     if (time !== undefined && time <= 20) tags.add('Быстрые рецепты');
     if (recipe.metadata?.difficulty === 'Простой') tags.add('Простые блюда');
-    if (ingredientIds.size <= 5) tags.add('До пяти ингредиентов');
+    if (ingredientIds.size + unresolved.length <= 5)
+      tags.add('До пяти ингредиентов');
     const ingredientWords = recipe.ingredients.map((item) => {
       const key = `${item.productId}\0${item.productName}`;
       const cached = ingredientWordCache.get(key);
@@ -220,6 +229,7 @@ export function buildRecipeIndex(
       ingredientWordCache.set(key, words);
       return words;
     });
+    ingredientWords.push(...unresolved.map(({ name }) => searchTerms(name)));
     return {
       recipe: {
         id: recipe.id,
@@ -252,12 +262,14 @@ export function buildRecipeIndex(
       ingredientWords,
       tags,
       ingredientIds,
+      unresolvedIngredientCount: unresolved.length,
       basicIds: new Set(
         recipe.ingredients
           .filter((item) => isPantryBasic(item.productName))
           .map((item) => item.productId),
       ),
       nutrition,
+      nutritionComplete: calculation.complete,
       time,
       favorite: recipeIsFavorite(state, recipe),
       builtin: isBuiltinRecipe(recipe.id),
@@ -290,26 +302,29 @@ function matchAvailable(
       .map(recipeIngredientKey),
   );
   const matched = [...relevant].filter((id) => available.has(id)).length;
+  const total = relevant.size + item.unresolvedIngredientCount;
   return {
     matched,
-    total: relevant.size,
-    missing: relevant.size - matched,
-    percent: relevant.size ? Math.round((100 * matched) / relevant.size) : 100,
+    total,
+    missing: total - matched,
+    percent: total ? Math.round((100 * matched) / total) : 100,
   };
 }
 
 function matchesRecommendation(item: IndexedRecipe, filters: RecipeFilters) {
-  const { nutrition, recipe, time, tags } = item;
+  const { nutrition, nutritionComplete, recipe, time, tags } = item;
   const { remaining, recommendation } = filters;
   switch (recommendation) {
     case 'Подходит под оставшиеся калории':
       return (
+        nutritionComplete &&
         !!remaining &&
         nutrition.calories <= remaining.calories &&
         remaining.calories > 0
       );
     case 'Поможет добрать белок':
       return (
+        nutritionComplete &&
         !!remaining &&
         remaining.protein > 0 &&
         nutrition.calories <= remaining.calories &&
@@ -317,16 +332,18 @@ function matchesRecommendation(item: IndexedRecipe, filters: RecipeFilters) {
       );
     case 'Высококалорийный перекус':
       return (
+        nutritionComplete &&
         [
           'Перекусы',
           'Высококалорийные коктейли',
           'Протеиновые коктейли',
-        ].includes(recipe.category) && nutrition.calories >= 350
+        ].includes(recipe.category) &&
+        nutrition.calories >= 350
       );
     case 'Быстрый завтрак':
       return recipe.category === 'Завтраки' && time !== undefined && time <= 20;
     case 'Подходит для набора массы':
-      return tags.has('Для набора массы');
+      return nutritionComplete && tags.has('Для набора массы');
     default:
       return true;
   }
@@ -354,16 +371,27 @@ function matchesFilters(item: IndexedRecipe, f: RecipeFilters) {
     (!f.noCook ||
       recipe.metadata?.cook === 0 ||
       recipe.category === 'Блюда без приготовления') &&
+    (item.nutritionComplete ||
+      (f.minCalories === undefined &&
+        f.maxCalories === undefined &&
+        f.minProtein === undefined &&
+        f.maxProtein === undefined &&
+        f.minFat === undefined &&
+        f.maxFat === undefined &&
+        f.minCarbs === undefined &&
+        f.maxCarbs === undefined)) &&
     (f.minCalories === undefined || n.calories >= f.minCalories) &&
     (f.maxCalories === undefined || n.calories <= f.maxCalories) &&
     (f.minProtein === undefined || n.protein >= f.minProtein) &&
+    (f.maxProtein === undefined || n.protein <= f.maxProtein) &&
     (f.minFat === undefined || n.fat >= f.minFat) &&
     (f.maxFat === undefined || n.fat <= f.maxFat) &&
     (f.minCarbs === undefined || n.carbs >= f.minCarbs) &&
     (f.maxCarbs === undefined || n.carbs <= f.maxCarbs) &&
     (f.maxTime === undefined || (time !== undefined && time <= f.maxTime)) &&
     (f.maxIngredients === undefined ||
-      ingredientIds.size <= f.maxIngredients) &&
+      ingredientIds.size + item.unresolvedIngredientCount <=
+        f.maxIngredients) &&
     (f.required?.every(contains) ?? true) &&
     !f.excluded?.some(contains) &&
     matchesRecommendation(item, f)
@@ -395,6 +423,10 @@ export function findRecipes(
       )
     )
       return [];
+    const match = f.pantry
+      ? matchAvailable(item, pantry, !!f.ignoreBasics)
+      : undefined;
+    if (f.pantryOnly && match?.missing !== 0) return [];
     let score = phrase && item.title === phrase ? 1000 : 0;
     for (const term of terms) {
       const match = Math.max(
@@ -408,9 +440,7 @@ export function findRecipes(
       {
         ...item,
         score,
-        match: f.pantry
-          ? matchAvailable(item, pantry, !!f.ignoreBasics)
-          : undefined,
+        match,
       },
     ];
   });
@@ -428,10 +458,18 @@ export function findRecipes(
   const time = (item: IndexedRecipe) => item.time ?? Number.MAX_SAFE_INTEGER;
   const comparisons: Record<RecipeSort, (a: Result, b: Result) => number> = {
     relevance: compareRelevance,
-    calories: (a, b) => b.nutrition.calories - a.nutrition.calories,
-    protein: (a, b) => b.nutrition.protein - a.nutrition.protein,
+    calories: (a, b) =>
+      Number(b.nutritionComplete) - Number(a.nutritionComplete) ||
+      b.nutrition.calories - a.nutrition.calories,
+    protein: (a, b) =>
+      Number(b.nutritionComplete) - Number(a.nutritionComplete) ||
+      b.nutrition.protein - a.nutrition.protein,
     time: (a, b) => time(a) - time(b),
-    ingredients: (a, b) => a.ingredientIds.size - b.ingredientIds.size,
+    ingredients: (a, b) =>
+      a.ingredientIds.size +
+      a.unresolvedIngredientCount -
+      b.ingredientIds.size -
+      b.unresolvedIngredientCount,
     name: compareName,
     usage: (a, b) => b.usage - a.usage,
     created: (a, b) => b.recipe.createdAt.localeCompare(a.recipe.createdAt),

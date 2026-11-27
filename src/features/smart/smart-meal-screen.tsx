@@ -7,7 +7,7 @@ import { ChoiceGroup } from '@/components/form-controls';
 import { addEntry } from '@/features/food/operations';
 import { makeEntry, newId, sumEntries } from '@/features/food/domain';
 import { FoodForm } from '@/features/food/food-form';
-import { meals, type MealType } from '@/features/food/model';
+import { meals, unitLabels, type MealType } from '@/features/food/model';
 import type { FoodSession } from '@/features/food/food-context';
 import { NutritionValues } from '@/features/food/nutrition-values';
 import { useNutrition } from '@/features/nutrition/nutrition-context';
@@ -96,7 +96,7 @@ export function SmartMealScreen({
           {suggestion.parts.map((part) => (
             <AppText key={part.id} variant="action">
               {part.name} · {formatNumber(part.amount)}{' '}
-              {part.kind === 'recipe' ? 'порц.' : 'г'}
+              {part.kind === 'recipe' ? 'порц.' : unitLabels[part.unit]}
             </AppText>
           ))}
           <NutritionValues values={suggestion.values} />
@@ -128,7 +128,7 @@ export function SmartMealScreen({
                         throw new Error('Продукт больше недоступен.');
                       return addEntry(
                         next,
-                        makeEntry(product, part.amount, 'g', meal, date),
+                        makeEntry(product, part.amount, part.unit, meal, date),
                       );
                     }, current),
                   ),

@@ -21,27 +21,31 @@ import {
 import { saveProduct } from './operations';
 
 const labels = {
-  calories: 'Калории на 100 г',
-  protein: 'Белки на 100 г',
-  fat: 'Жиры на 100 г',
-  carbs: 'Углеводы на 100 г',
+  calories: 'Калории',
+  protein: 'Белки',
+  fat: 'Жиры',
+  carbs: 'Углеводы',
 };
 const conversionLabels = {
   gramsPerMl: 'Плотность, г/мл (необязательно)',
   pieceGrams: 'Вес штуки, г (необязательно)',
   servingGrams: 'Вес порции, г (необязательно)',
+  servingMl: 'Объём порции, мл (необязательно)',
 } as const;
-const conversionKeys = ['gramsPerMl', 'pieceGrams', 'servingGrams'] as const;
+const massConversions = ['gramsPerMl', 'pieceGrams', 'servingGrams'] as const;
+const volumeConversions = ['servingMl'] as const;
 const optionalDecimal = (text: string) =>
   text.trim() ? parseDecimal(text) : undefined;
 export function ProductEditor({
   product,
   barcode = '',
+  massOnly = false,
   onBack,
   onSaved,
 }: {
   product?: FoodProduct;
   barcode?: string;
+  massOnly?: boolean;
   onBack(): void;
   onSaved(product: FoodProduct): void;
 }) {
@@ -51,6 +55,7 @@ export function ProductEditor({
     brand: product?.brand ?? '',
     category: product?.category ?? categories[0],
     barcode: product?.barcode ?? barcode,
+    baseUnit: product?.baseUnit ?? 'g',
     calories: product ? String(product.per100.calories) : '',
     protein: product ? String(product.per100.protein) : '',
     fat: product ? String(product.per100.fat) : '',
@@ -58,6 +63,7 @@ export function ProductEditor({
     gramsPerMl: product?.gramsPerMl?.toString() ?? '',
     pieceGrams: product?.pieceGrams?.toString() ?? '',
     servingGrams: product?.servingGrams?.toString() ?? '',
+    servingMl: product?.servingMl?.toString() ?? '',
   }));
   const [draft, setDraft] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -65,12 +71,15 @@ export function ProductEditor({
   const fields = useRef(new Map<string, TextInputInstance>());
   const [id] = useState(() => product?.id ?? `custom-${newId()}`);
   const now = new Date().toISOString();
+  const volume = draft.baseUnit === 'ml';
+  const conversionKeys = volume ? volumeConversions : massConversions;
   const value: FoodProduct = {
     ...product,
     id,
     name: draft.name.trim(),
     brand: draft.brand.trim() || undefined,
     barcode: draft.barcode.trim() || undefined,
+    baseUnit: draft.baseUnit,
     category: draft.category,
     per100: {
       calories: parseDecimal(draft.calories),
@@ -82,12 +91,16 @@ export function ProductEditor({
     isCustom: true,
     createdAt: product?.createdAt ?? now,
     updatedAt: now,
-    gramsPerMl: optionalDecimal(draft.gramsPerMl),
-    pieceGrams: optionalDecimal(draft.pieceGrams),
-    servingGrams: optionalDecimal(draft.servingGrams),
+    gramsPerMl: volume ? undefined : optionalDecimal(draft.gramsPerMl),
+    pieceGrams: volume ? undefined : optionalDecimal(draft.pieceGrams),
+    servingGrams: volume ? undefined : optionalDecimal(draft.servingGrams),
+    servingMl: volume ? optionalDecimal(draft.servingMl) : undefined,
   };
   const dirty = JSON.stringify(initial) !== JSON.stringify(draft);
-  function field(name: keyof typeof draft, text: string) {
+  function field<K extends keyof typeof draft>(
+    name: K,
+    text: (typeof draft)[K],
+  ) {
     setDraft((d) => ({ ...d, [name]: text }));
   }
   async function save() {
@@ -146,11 +159,22 @@ export function ProductEditor({
           onChangeText={(v) => field('barcode', v)}
           error={errors.barcode}
         />
+        {!massOnly && (
+          <ChoiceGroup
+            label="Пищевая ценность на этикетке"
+            value={draft.baseUnit}
+            onChange={(value) => field('baseUnit', value)}
+            options={[
+              { value: 'g', label: 'На 100 г' },
+              { value: 'ml', label: 'На 100 мл' },
+            ]}
+          />
+        )}
         {nutrientKeys.map((key) => (
           <FormField
             key={key}
             name={key}
-            label={labels[key]}
+            label={`${labels[key]} на 100 ${volume ? 'мл' : 'г'}`}
             value={draft[key]}
             inputMode="decimal"
             error={errors[key]}

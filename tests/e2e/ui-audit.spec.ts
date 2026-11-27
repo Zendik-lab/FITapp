@@ -206,10 +206,10 @@ test('системные области отделяют контент и пр�
   await expectNoHorizontalOverflow(page);
   await seed(page, 0);
   await page.goto(url);
-  await expect(page.locator('.app-safe-area:visible')).toHaveCSS(
-    'padding-bottom',
-    '21px',
-  );
+  const onboarding = page.locator('.app-safe-area').filter({
+    has: page.getByRole('button', { name: 'Начать', exact: true }),
+  });
+  await expect(onboarding).toHaveCSS('padding-bottom', '21px');
   await expectNoHorizontalOverflow(page);
 });
 

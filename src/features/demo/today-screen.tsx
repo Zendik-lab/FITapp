@@ -32,10 +32,14 @@ import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
 import { useFoodDiary } from '@/features/food/food-context';
 import { FoodFlow } from '@/features/food/food-flow';
 import { DiaryStatus } from '@/features/food/diary-status';
-import { dateKey, entryNutrition, parseDateKey } from '@/features/food/domain';
+import {
+  dateKey,
+  entryNutrition,
+  formatEntryQuantity,
+  parseDateKey,
+} from '@/features/food/domain';
 import { NutritionValues } from '@/features/food/nutrition-values';
 import type { FoodDiaryEntry } from '@/features/food/model';
-import { formatFoodQuantity } from '@/features/food/units';
 import { AppSettingsContext } from '@/features/settings/app-settings-context';
 import {
   defaultPersonalization,
@@ -120,10 +124,7 @@ export function TodayScreen() {
           .map((entry) => (
             <Card key={entry.id}>
               <AppText variant="action">
-                {entry.product.name} ·{' '}
-                {entry.recipe && entry.unit === 'serving'
-                  ? `${formatFoodQuantity(entry.amount)} порц.`
-                  : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+                {entry.product.name} · {formatEntryQuantity(entry)}
               </AppText>
               <NutritionValues values={entryNutrition(entry)} />
               <IconButton

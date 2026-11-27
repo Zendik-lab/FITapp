@@ -2,9 +2,20 @@ import { useRef, useState } from 'react';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
+import { normalizeScannedBarcode, type CameraBarcodeFormat } from './domain';
 
 export interface CameraScannerProps {
   onCode(code: string): void;
+}
+const formats: CameraBarcodeFormat[] = [
+  'ean13',
+  'ean8',
+  'upc_a',
+  'upc_e',
+  'itf14',
+];
+function supportedFormat(format: string): format is CameraBarcodeFormat {
+  return formats.some((candidate) => candidate === format);
 }
 export function CameraScanner({ onCode }: CameraScannerProps) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -40,22 +51,26 @@ export function CameraScanner({ onCode }: CameraScannerProps) {
     );
   return (
     <>
-      <CameraView
-        style={{ height: 240, width: '100%' }}
-        facing="back"
-        barcodeScannerSettings={{
-          barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'],
-        }}
-        onMountError={() =>
-          setFailure('Камера недоступна. Введите код вручную.')
-        }
-        onBarcodeScanned={(result) => {
-          if (!scanned.current) {
-            scanned.current = true;
-            onCode(result.data);
+      {!failure && (
+        <CameraView
+          style={{ height: 240, width: '100%' }}
+          facing="back"
+          barcodeScannerSettings={{
+            barcodeTypes: formats,
+          }}
+          onMountError={() =>
+            setFailure('Камера недоступна. Введите код вручную.')
           }
-        }}
-      />
+          onBarcodeScanned={(result) => {
+            if (!supportedFormat(result.type)) return;
+            const code = normalizeScannedBarcode(result.data, result.type);
+            if (!scanned.current && code) {
+              scanned.current = true;
+              onCode(code);
+            }
+          }}
+        />
+      )}
       {!!failure && (
         <AppText tone="error" accessibilityRole="alert">
           {failure}

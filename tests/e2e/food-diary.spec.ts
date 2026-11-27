@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { createStaticServer } from '../../scripts/serve-web.cjs';
 import { sampleDraft } from '../fixtures/profile';
 import { unitoolsRecipes } from '../../src/features/recipes/library-unitools';
@@ -29,6 +30,126 @@ const visible = (page: Page, locator: Locator) =>
   locator.and(page.locator(':not([inert] *)'));
 const button = (page: Page, name: string) =>
   visible(page, page.getByRole('button', { name, exact: true }));
+
+test('пакет рецептов загружается отдельно, открывается офлайн и удаляется', async ({
+  page,
+  context,
+}) => {
+  await seed(page);
+  await button(page, 'Рецепты').click();
+  await expect(
+    page.getByText(/рецептов с неполными КБЖУ · .* КБ/),
+  ).toBeVisible();
+  const search = () =>
+    visible(page, page.getByLabel('Поиск рецептов', { exact: true }));
+  await search().fill('бешбармак');
+  await expect(button(page, 'Открыть: Бешбармак')).toHaveCount(0);
+  await button(page, 'Скачать пакет рецептов').click();
+  await expect(button(page, 'Открыть: Бешбармак')).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
+
+  await context.setOffline(true);
+  await page.reload();
+  await button(page, 'Рецепты').click();
+  await expect(
+    page.getByText('Пакет доступен офлайн', { exact: true }),
+  ).toBeVisible();
+  await search().fill('бешбармак');
+  await button(page, 'Открыть: Бешбармак').click();
+  await expect(
+    visible(
+      page,
+      page.getByText('КБЖУ только для сопоставленных ингредиентов', {
+        exact: true,
+      }),
+    ),
+  ).toBeVisible();
+  await expect(button(page, 'Добавить в дневник')).toHaveCount(0);
+  await button(page, 'Назад').click();
+  await button(page, 'Удалить пакет рецептов').click();
+  await expect(button(page, 'Открыть: Бешбармак')).toHaveCount(0);
+  await search().fill('салат по казахски с говядиной');
+  await expect(
+    button(page, 'Открыть: Салат по-казахски с говядиной'),
+  ).toBeVisible();
+});
+
+test('скачанный пакет Казахстана доступен офлайн и удаляется отдельно от дневника', async ({
+  page,
+  context,
+}) => {
+  const index = await page.request.get(url + '/catalog/manifest.json');
+  test.skip(
+    index.status() === 404,
+    'Для проверки скачивания требуется собранный реальный пакет.',
+  );
+  expect(index.ok()).toBe(true);
+  const manifest = (await index.json()) as {
+    packages: { id: string; count: number; files: { path: string }[] }[];
+  };
+  const pack = manifest.packages.find(({ id }) => id === 'kazakhstan');
+  if (!pack) throw new Error('Missing catalog package: kazakhstan');
+  const chunk = await page.request.get(url + '/catalog/' + pack.files[0].path);
+  expect(chunk.ok()).toBe(true);
+  const rows = JSON.parse(gunzipSync(await chunk.body()).toString()) as [
+    string,
+    string,
+  ][];
+  const [code, product] = rows[0];
+  await seed(page);
+  await button(page, 'Поиск продуктов').click();
+  await button(page, 'Офлайн-каталоги').click();
+  await expect(
+    page.getByRole('heading', { name: 'Офлайн-каталоги' }),
+  ).toBeVisible();
+  const card = page.getByText('Казахстан', { exact: true }).locator('..');
+  await expect(
+    card.getByText(new RegExp(`${pack.count} продуктов`)),
+  ).toBeVisible();
+  await card
+    .getByRole('button', { name: 'Скачать пакет', exact: true })
+    .click();
+  await expect(
+    card.getByText('Доступен без интернета', { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
+
+  await context.setOffline(true);
+  await page.reload();
+  await expect(button(page, 'Поиск продуктов')).toBeEnabled();
+  await button(page, 'Поиск продуктов').click();
+  await visible(
+    page,
+    page.getByLabel('Название или штрихкод', { exact: true }),
+  ).fill(code);
+  await expect(button(page, 'Выбрать: ' + product)).toBeVisible();
+  await button(page, 'Сканировать штрихкод').click();
+  await visible(page, page.getByLabel('Штрихкод', { exact: true })).fill(code);
+  await button(page, 'Найти по штрихкоду').click();
+  await expect(
+    page.getByRole('heading', { name: 'Порция продукта' }),
+  ).toBeVisible();
+  await expect(
+    visible(page, page.getByText(product, { exact: true })),
+  ).toBeVisible();
+  await button(page, 'Добавить в дневник').click();
+  await expect(button(page, 'Поиск продуктов')).toBeVisible();
+  await expect(page.getByText(product, { exact: true })).toBeVisible();
+
+  await button(page, 'Поиск продуктов').click();
+  await button(page, 'Офлайн-каталоги').click();
+  await card.getByRole('button', { name: 'Удалить пакет' }).click();
+  await button(page, 'Подтвердить удаление пакета').click();
+  await expect(page.getByText('Пакет удалён.')).toBeVisible();
+  await button(page, 'Назад').click();
+  await button(page, 'Назад').click();
+  await expect(page.getByText(product, { exact: true })).toBeVisible();
+});
+
 async function seed(page: Page) {
   await page.goto(url + '/__food-setup');
   await page.evaluate(
@@ -499,13 +620,76 @@ test('офлайн CRUD, сохранение после двух перезап
 });
 test.describe('онлайн API без перехвата Service Worker', () => {
   test.use({ serviceWorkers: 'block' });
+  test('сканер сохраняет продукт по GTIN-14 и офлайн добавляет объёмную порцию', async ({
+    page,
+    context,
+  }) => {
+    await seed(page);
+    const barcode = '10012345678902';
+    let calls = 0;
+    await page.route(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?*`,
+      async (route) => {
+        calls++;
+        await route.fulfill({
+          headers: { 'Access-Control-Allow-Origin': '*' },
+          json: {
+            status: 1,
+            product: {
+              code: barcode,
+              product_name_ru: 'Тестовый напиток по штрихкоду',
+              nutrition_data_per: '100ml',
+              serving_size: '250 мл',
+              nutriments: {
+                'energy-kcal_100g': 40,
+                proteins_100g: 0,
+                fat_100g: 0,
+                carbohydrates_100g: 10,
+              },
+            },
+          },
+        });
+      },
+    );
+    const lookup = async () => {
+      await button(page, 'Сканировать штрихкод').click();
+      await visible(page, page.getByLabel('Штрихкод', { exact: true })).fill(
+        barcode,
+      );
+      await button(page, 'Найти по штрихкоду').click();
+      await expect(
+        visible(
+          page,
+          page.getByText('Тестовый напиток по штрихкоду', { exact: true }),
+        ),
+      ).toBeVisible();
+    };
+    await lookup();
+    await expect(
+      visible(
+        page,
+        page.getByText('Товар сохранён для поиска офлайн.', { exact: true }),
+      ),
+    ).toBeVisible();
+    expect(calls).toBe(1);
+    await page.reload();
+    await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+    await context.setOffline(true);
+    await lookup();
+    await typeStable(page, 'Количество, мл', '125');
+    await button(page, 'Добавить в дневник').click();
+    await expect(
+      visible(page, page.getByText('125 мл', { exact: true })),
+    ).toBeVisible();
+    expect(calls).toBe(1);
+  });
   test('OFF: локальный поиск без запросов, онлайн кеш, неполные данные, ручной штрихкод и ошибка камеры', async ({
     page,
     context,
   }) => {
     await seed(page);
     const calls: string[] = [];
-    await page.route('https://world.openfoodfacts.org/**', async (route) => {
+    await page.route('https://search.openfoodfacts.org/**', async (route) => {
       calls.push(route.request().url());
       await route.fulfill({
         headers: {
@@ -513,7 +697,7 @@ test.describe('онлайн API без перехвата Service Worker', () =>
           'Content-Type': 'application/json',
         },
         json: {
-          products: [
+          hits: [
             {
               code: '036000291452',
               product_name: 'Онлайн тест',
@@ -560,7 +744,12 @@ test.describe('онлайн API без перехвата Service Worker', () =>
     await button(page, 'Сканировать штрихкод').click();
     await button(page, 'Открыть камеру').click();
     await expect(
-      visible(page, page.getByText(/камер.*вручную|Доступ к камере отклонён/i)),
+      visible(
+        page,
+        page
+          .getByText(/камер.*вручную|Доступ к камере отклонён/i)
+          .and(page.locator('[aria-live="polite"]')),
+      ),
     ).toBeVisible();
     await typeStable(page, 'Штрихкод', '123');
     await button(page, 'Найти по штрихкоду').click();

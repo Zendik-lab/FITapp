@@ -1,4 +1,8 @@
-import type { Recipe, RecipeCategory } from './model';
+import type {
+  Recipe,
+  RecipeCategory,
+  UnresolvedRecipeIngredient,
+} from './model';
 
 export interface LibraryRecipeData {
   id: string;
@@ -21,5 +25,7 @@ export interface LibraryRecipeData {
   steps: readonly string[];
   weight?: number;
   source?: string;
+  sourceUrl?: string;
   seasoningNote?: string;
+  unresolvedIngredients?: readonly UnresolvedRecipeIngredient[];
 }

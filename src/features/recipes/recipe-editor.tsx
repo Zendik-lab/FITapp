@@ -14,7 +14,7 @@ import { describeError } from '@/database/storage-diagnostics';
 import { formatNumber } from '@/features/calendar/calendar';
 import { useFoodDiary } from '@/features/food/food-context';
 import { FoodForm } from '@/features/food/food-form';
-import { newId, parseDecimal } from '@/features/food/domain';
+import { isMassBased, newId, parseDecimal } from '@/features/food/domain';
 import { unitLabels, type FoodProduct } from '@/features/food/model';
 import { NutritionValues } from '@/features/food/nutrition-values';
 import { ProductPicker } from '@/features/food/product-picker';
@@ -351,7 +351,13 @@ export function RecipeEditor({
     }
   }
   if (page === 'product')
-    return <ProductEditor onBack={() => setPage('picker')} onSaved={select} />;
+    return (
+      <ProductEditor
+        massOnly
+        onBack={() => setPage('picker')}
+        onSaved={select}
+      />
+    );
   if (page === 'picker')
     return (
       <FoodForm title="Выбрать ингредиент" onBack={() => setPage('editor')}>
@@ -360,7 +366,7 @@ export function RecipeEditor({
           label="Создать продукт"
           onPress={() => setPage('product')}
         />
-        <ProductPicker onProduct={select} />
+        <ProductPicker onProduct={select} acceptProduct={isMassBased} />
       </FoodForm>
     );
   return (

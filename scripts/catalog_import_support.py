@@ -20,7 +20,7 @@ UNIT_ALIASES = {
     't': 'tsp', 'teaspoon': 'tsp', 'teaspoons': 'tsp', 'ч л': 'tsp',
     'tablespoon': 'tbsp', 'tablespoons': 'tbsp', 'ст л': 'tbsp',
     'cups': 'cup', 'чашка': 'cup', 'чашки': 'cup', 'стакан': 'glass', 'шт': 'piece',
-    'pieces': 'piece', 'cloves': 'clove', 'slices': 'slice', 'sprigs': 'sprig',
+    'pcs': 'piece', 'pieces': 'piece', 'cloves': 'clove', 'slices': 'slice', 'sprigs': 'sprig',
     'щепотка': 'pinch', 'пучок': 'bunch', 'порция': 'serving',
     'ounce': 'oz', 'ounces': 'oz', 'pound': 'lb', 'pounds': 'lb',
     'to taste': 'toTaste', 'по вкусу': 'toTaste',

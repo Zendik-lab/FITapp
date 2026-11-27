@@ -28,7 +28,8 @@ export function saveRecipe(
 ): FoodState {
   if (isBuiltinRecipe(recipe.id))
     throw new Error('Скопируйте встроенный рецепт, чтобы изменить его.');
-  validateRecipe(recipe);
+  if (!validateRecipe(recipe).complete)
+    throw new Error('Укажите КБЖУ всех ингредиентов перед сохранением.');
   const existing = state.recipes.find((r) => r.id === recipe.id);
   if (previous) ensureCurrent(existing, previous);
   else if (existing) return state;
@@ -131,8 +132,11 @@ export function addRecipeEntry(
   const recipe = getBuiltinRecipe(id) ?? state.recipes.find((r) => r.id === id);
   if (previous) ensureCurrent(recipe, previous);
   if (!recipe) throw new Error('Рецепт уже удалён.');
+  const nutrition = validateRecipe(recipe);
+  if (!nutrition.complete)
+    throw new Error('КБЖУ рассчитаны не для всех ингредиентов рецепта.');
   const snapshot = {
-    total: validateRecipe(recipe).total,
+    total: nutrition.total,
     servings: recipe.servings,
     cookedWeightGrams: recipe.cookedWeightGrams,
     ingredients: ingredientQuantities(recipe.ingredients).map(

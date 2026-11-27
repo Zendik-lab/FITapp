@@ -8,7 +8,8 @@ import {
 } from '@/features/food/model';
 import {
   dateKey,
-  gramsFor,
+  isMassBased,
+  portionBaseAmount,
   parseDateKey,
   validateProduct,
   validNutrition,
@@ -151,14 +152,17 @@ function product(value: unknown): value is FoodProduct {
     if (value[k] !== undefined && typeof value[k] !== 'string') return false;
   if (
     (value.aliases !== undefined && !strings(value.aliases)) ||
+    (value.barcodes !== undefined && !strings(value.barcodes)) ||
     (value.approximate !== undefined &&
       typeof value.approximate !== 'boolean') ||
-    (value.baseUnit !== undefined && value.baseUnit !== 'g') ||
+    (value.baseUnit !== undefined &&
+      value.baseUnit !== 'g' &&
+      value.baseUnit !== 'ml') ||
     (value.fdcId !== undefined &&
       (!positiveNumber(value.fdcId) || !Number.isInteger(value.fdcId)))
   )
     return false;
-  for (const k of ['gramsPerMl', 'pieceGrams', 'servingGrams'])
+  for (const k of ['gramsPerMl', 'pieceGrams', 'servingGrams', 'servingMl'])
     if (
       value[k] !== undefined &&
       (typeof value[k] !== 'number' ||
@@ -166,6 +170,43 @@ function product(value: unknown): value is FoodProduct {
         value[k] <= 0)
     )
       return false;
+  const details = value.catalogDetails;
+  if (details !== undefined) {
+    if (!record(details) || Array.isArray(details)) return false;
+    for (const key of [
+      'originalName',
+      'russianName',
+      'manufacturer',
+      'sourceCategory',
+      'ingredients',
+      'allergens',
+      'packageText',
+      'url',
+      'license',
+    ])
+      if (details[key] !== undefined && typeof details[key] !== 'string')
+        return false;
+    for (const key of ['sugar', 'fiber', 'saturatedFat', 'salt']) {
+      const amount = details[key];
+      if (
+        amount !== undefined &&
+        (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0)
+      )
+        return false;
+    }
+    if (
+      (details.countries !== undefined && !strings(details.countries)) ||
+      (details.packageAmount !== undefined &&
+        !positiveNumber(details.packageAmount)) ||
+      (details.packageUnit !== undefined &&
+        details.packageUnit !== 'g' &&
+        details.packageUnit !== 'ml') ||
+      (details.completeness !== undefined &&
+        details.completeness !== 'macros' &&
+        details.completeness !== 'extended')
+    )
+      return false;
+  }
   return validateProduct(value as unknown as FoodProduct).errors.length === 0;
 }
 function valid(value: unknown): value is FoodState {
@@ -219,14 +260,15 @@ function valid(value: unknown): value is FoodState {
       try {
         if (dateKey(parseDateKey(e.date)) !== e.date) return false;
         if (e.recipe !== undefined) return recipeEntry(e);
-        return (
-          product(e.product) &&
-          gramsFor(
-            e.product,
-            e.amount,
-            e.unit as 'g' | 'ml' | 'piece' | 'serving',
-          ) === e.grams
+        if (!product(e.product)) return false;
+        const quantity = portionBaseAmount(
+          e.product,
+          e.amount,
+          e.unit as 'g' | 'ml' | 'piece' | 'serving',
         );
+        return isMassBased(e.product)
+          ? quantity === e.grams && e.milliliters === undefined
+          : e.grams === null && quantity === e.milliliters;
       } catch {
         return false;
       }

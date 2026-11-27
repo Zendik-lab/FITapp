@@ -4,6 +4,7 @@ import {
   scaleNutrition,
   addNutrition,
   zeroNutrition,
+  isMassBased,
 } from '@/features/food/domain';
 import type { FoodProduct } from '@/features/food/model';
 import {
@@ -33,6 +34,7 @@ export function decimalText(amount: number): string {
 export function ingredientFactors(
   product: FoodProduct,
 ): Partial<Record<IngredientUnit, number>> {
+  if (!isMassBased(product)) return {};
   const factors = {
     g: 1,
     kg: 1000,
@@ -89,7 +91,9 @@ export function ingredientNutrition(ingredient: RecipeIngredient) {
 }
 
 export function calculateRecipe(
-  recipe: Pick<Recipe, 'ingredients' | 'servings' | 'cookedWeightGrams'>,
+  recipe: Pick<Recipe, 'ingredients' | 'servings' | 'cookedWeightGrams'> & {
+    metadata?: Pick<NonNullable<Recipe['metadata']>, 'unresolvedIngredients'>;
+  },
 ) {
   if (!positive(recipe.servings))
     throw new Error('Введите положительное количество порций.');
@@ -115,6 +119,7 @@ export function calculateRecipe(
     throw new Error('Проверьте количество и КБЖУ ингредиентов.');
   return {
     total,
+    complete: !recipe.metadata?.unresolvedIngredients?.length,
     perServing: scaleNutrition(total, 1 / recipe.servings),
     per100: scaleNutrition(
       total,
@@ -138,6 +143,19 @@ export function scaleRecipe(recipe: Recipe, servings: number): Recipe {
     ingredients: recipe.ingredients.map((i) =>
       resizeIngredient(i, i.quantity * factor),
     ),
+    ...(recipe.metadata?.unresolvedIngredients?.length
+      ? {
+          metadata: {
+            ...recipe.metadata,
+            unresolvedIngredients: recipe.metadata.unresolvedIngredients.map(
+              (ingredient) =>
+                ingredient.quantity === undefined
+                  ? ingredient
+                  : { ...ingredient, quantity: ingredient.quantity * factor },
+            ),
+          },
+        }
+      : {}),
   };
   calculateRecipe(next);
   return next;

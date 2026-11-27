@@ -9,11 +9,13 @@ import { describeError } from '@/database/storage-diagnostics';
 import { FoodForm } from './food-form';
 import { useFoodDiary } from './food-context';
 import {
-  gramsFor,
+  isMassBased,
   makeEntry,
   parseDateKey,
   parseDecimal,
   portion,
+  portionBaseAmount,
+  productMatchesBarcode,
   unitsFor,
 } from './domain';
 import {
@@ -21,6 +23,7 @@ import {
   deleteProduct,
   editEntry,
   removeEntry,
+  saveProduct,
   toggleFavorite,
 } from './operations';
 import {
@@ -35,9 +38,39 @@ import { NutritionValues } from './nutrition-values';
 import { formatNumber } from '@/features/calendar/calendar';
 import { useHapticFeedback } from '@/features/settings/feedback';
 
+function matchesProduct(saved: FoodProduct, product: FoodProduct): boolean {
+  return (
+    saved.id === product.id ||
+    [product.barcode, ...(product.barcodes ?? [])].some(
+      (code) => code && productMatchesBarcode(saved, code),
+    )
+  );
+}
+
+const regionalCountries: Record<string, string> = {
+  kazakhstan: 'Казахстан',
+  russia: 'Россия',
+  kyrgyzstan: 'Кыргызстан',
+  uzbekistan: 'Узбекистан',
+  belarus: 'Беларусь',
+  ukraine: 'Украина',
+  armenia: 'Армения',
+  azerbaijan: 'Азербайджан',
+  georgia: 'Грузия',
+  moldova: 'Молдова',
+  tajikistan: 'Таджикистан',
+  turkmenistan: 'Туркменистан',
+};
+
+function displayCountry(raw: string) {
+  const country = raw.replace(/^[a-z]{2}:/i, '');
+  return regionalCountries[country] ?? country.replace(/-/g, ' ');
+}
+
 export function ProductDetail({
   product,
   entry,
+  offlineSaved,
   date,
   meal,
   onBack,
@@ -46,6 +79,7 @@ export function ProductDetail({
 }: {
   product: FoodProduct;
   entry?: ProductDiaryEntry;
+  offlineSaved?: boolean;
   date: string;
   meal: MealType;
   onBack(): void;
@@ -58,20 +92,60 @@ export function ProductDetail({
 }) {
   const session = useFoodDiary();
   const feedback = useHapticFeedback();
+  const baseUnit = isMassBased(product) ? 'g' : 'ml';
   const [amount, setAmount] = useState(String(entry?.amount ?? 100));
-  const [unit, setUnit] = useState<FoodUnit>(entry?.unit ?? 'g');
+  const [unit, setUnit] = useState<FoodUnit>(entry?.unit ?? baseUnit);
   const [selectedMeal, setMeal] = useState(entry?.meal ?? meal);
   const [selectedDate, setDate] = useState(entry?.date ?? date);
   const [failure, setFailure] = useState('');
   const [confirm, setConfirm] = useState<'entry' | 'product' | null>(null);
   const [imageFailed, setImageFailed] = useState(false);
-  const favorite = session?.state.favorites.some(
-    (f) => f.productId === product.id,
-  );
+  const [showDetails, setShowDetails] = useState(false);
   const exists = session?.products.some((p) => p.id === product.id);
+  const favoriteProduct = exists
+    ? product
+    : session?.state.products.find((p) => matchesProduct(p, product));
+  const favorite = session?.state.favorites.some(
+    (f) => f.productId === (favoriteProduct?.id ?? product.id),
+  );
+  const details = product.catalogDetails;
+  const sourceUrl =
+    details?.url ??
+    (product.id.startsWith('off-') && product.barcode
+      ? `https://world.openfoodfacts.org/product/${product.barcode}`
+      : undefined);
+  const measures = [
+    ['Сахар', details?.sugar],
+    ['Клетчатка', details?.fiber],
+    ['Насыщенные жиры', details?.saturatedFat],
+    ['Соль', details?.salt],
+  ] as const;
+  const attributes = [
+    [
+      'Оригинальное название',
+      details?.originalName !== product.name
+        ? details?.originalName
+        : undefined,
+    ],
+    ['Производитель', details?.manufacturer],
+    ['Страны продажи', details?.countries?.map(displayCountry).join(', ')],
+    [
+      'Упаковка',
+      details?.packageText ||
+        (details?.packageAmount && details.packageUnit
+          ? `${formatNumber(details.packageAmount)} ${unitLabels[details.packageUnit]}`
+          : undefined),
+    ],
+    [
+      'Штрихкоды',
+      [product.barcode, ...(product.barcodes ?? [])].filter(Boolean).join(', '),
+    ],
+    ['Состав', details?.ingredients],
+    ['Аллергены', details?.allergens],
+  ] as const;
   const dirty =
     amount !== String(entry?.amount ?? 100) ||
-    unit !== (entry?.unit ?? 'g') ||
+    unit !== (entry?.unit ?? baseUnit) ||
     selectedMeal !== (entry?.meal ?? meal) ||
     selectedDate !== (entry?.date ?? date);
   let values;
@@ -134,27 +208,72 @@ export function ProductDetail({
         <AppText variant="section">{product.name}</AppText>
         {!!product.brand && <AppText tone="muted">{product.brand}</AppText>}
         {!!product.imageUrl && !imageFailed && (
-          <Image
-            source={{ uri: product.imageUrl }}
-            accessibilityLabel={product.name}
-            style={{ width: 100, height: 100 }}
-            onError={() => setImageFailed(true)}
-          />
+          <>
+            <Image
+              source={{ uri: product.imageUrl }}
+              accessibilityLabel={product.name}
+              style={{ width: 100, height: 100 }}
+              onError={() => setImageFailed(true)}
+            />
+            {product.imageUrl.startsWith(
+              'https://images.openfoodfacts.org/',
+            ) && (
+              <AppText variant="caption" tone="muted">
+                Фото · Open Food Facts · CC BY-SA
+              </AppText>
+            )}
+          </>
         )}
-        <NutritionValues values={product.per100} caption="На 100 г" />
+        <NutritionValues
+          values={product.per100}
+          caption={`На 100 ${unitLabels[baseUnit]}`}
+        />
+        {offlineSaved && (
+          <AppText variant="caption" accessibilityLiveRegion="polite">
+            Товар сохранён для поиска офлайн.
+          </AppText>
+        )}
         <AppText variant="caption" tone="muted">
           {product.source}
         </AppText>
-        {product.id.startsWith('off-') && (
+        {sourceUrl?.startsWith('https://') && (
           <PrimaryButton
             secondary
-            label="Источник: Open Food Facts · ODbL"
+            label={
+              details?.license
+                ? `Открыть источник · ${details.license}`
+                : 'Открыть источник'
+            }
             onPress={() => {
-              void Linking.openURL(
-                `https://world.openfoodfacts.org/product/${product.barcode}`,
-              ).catch(() => setFailure('Не удалось открыть источник.'));
+              void Linking.openURL(sourceUrl).catch(() =>
+                setFailure('Не удалось открыть источник.'),
+              );
             }}
           />
+        )}
+        {!!(details || product.barcode || product.barcodes?.length) && (
+          <PrimaryButton
+            secondary
+            label={showDetails ? 'Свернуть сведения' : 'Состав и сведения'}
+            onPress={() => setShowDetails(!showDetails)}
+          />
+        )}
+        {showDetails && (
+          <>
+            {attributes.map(
+              ([label, value]) =>
+                value && (
+                  <AppText key={label} variant="caption">
+                    {label} · {value}
+                  </AppText>
+                ),
+            )}
+            {details && (
+              <AppText variant="caption" tone="muted">
+                {`На 100 ${unitLabels[baseUnit]}\n${measures.map(([label, value]) => `${label} · ${value === undefined ? 'нет данных' : `${formatNumber(value)} г`}`).join('\n')}`}
+              </AppText>
+            )}
+          </>
         )}
       </Card>
       <FormField
@@ -177,9 +296,9 @@ export function ProductDetail({
             value: u,
             label: unitLabels[u],
             description:
-              u === 'g'
+              u === baseUnit
                 ? undefined
-                : `1 ${unitLabels[u]} = ${formatNumber(gramsFor(product, 1, u))} г (справочный вес)`,
+                : `1 ${unitLabels[u]} = ${formatNumber(portionBaseAmount(product, 1, u))} ${unitLabels[baseUnit]}`,
           }))}
         />
       )}
@@ -214,7 +333,7 @@ export function ProductDetail({
         disabled={session?.pending || !values}
         onPress={() => void save()}
       />
-      {exists && (
+      {session && (!entry || exists) && (
         <PrimaryButton
           secondary
           label={favorite ? 'Убрать из избранного' : 'В избранное'}
@@ -222,7 +341,15 @@ export function ProductDetail({
           onPress={() =>
             session &&
             void perform(() =>
-              session.change((s) => toggleFavorite(s, product.id)),
+              session.change((state) => {
+                if (exists) return toggleFavorite(state, product.id);
+                const saved = state.products.find((p) =>
+                  matchesProduct(p, product),
+                );
+                return saved
+                  ? toggleFavorite(state, saved.id)
+                  : toggleFavorite(saveProduct(state, product), product.id);
+              }),
             )
           }
         />

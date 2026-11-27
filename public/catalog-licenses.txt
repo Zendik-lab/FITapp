@@ -1,11 +1,31 @@
 MassTracker · Catalog data
 
+Open Food Facts contributors.
+Source: https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz
+Database: ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/
+Individual database contents: Database Contents License.
+MassTracker selected and normalized the TSV fields, applied checksum and
+nutrition checks, and split the resulting database into downloadable files.
+The catalog index and the current database files are at /catalog/manifest.json.
+Online product photos are credited to Open Food Facts contributors under CC BY-SA.
+Terms: https://world.openfoodfacts.org/terms-of-use
+
+U.S. Department of Agriculture, Agricultural Research Service.
+FoodData Central, Global Branded Food Products Database, October 29, 2026.
+Source: https://fdc.nal.usda.gov/download-datasets/
+License: CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
+This data is distributed in a separate package. The build selects records
+with valid GTINs and complete macronutrients and preserves source FDC IDs.
+
 UniTools World Recipes v2.0.0, by UniTools — theunitools.com
 Source: https://theunitools.com/data/unitools-recipes-v1.json
 License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
 The distributed subset is an adaptation by MassTracker under CC BY-SA 4.0.
 Changes include selection, categorization, conversion of ingredient quantities
 to reference masses, recalculation of nutrition, and omission of photos.
+The optional Recipe Expansion pack carries 459 UniTools recipes. MassTracker
+links verified ingredient matches and keeps source quantities for ingredients
+without verified nutrition or weight. These recipes have incomplete nutrition.
 
 U.S. Department of Agriculture, Agricultural Research Service.
 FoodData Central, Standard Reference Legacy, April 2018.
@@ -19,3 +39,9 @@ License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
 Each recipe card credits the Wikibooks page and revision. MassTracker
 translated the selected recipes into Russian, adapted ingredient
 descriptions, converted units and recalculated nutrition.
+
+Russian Wikibooks contributors, Recipe: Kazakh-style salad, variant 3.
+Source: https://ru.wikibooks.org/w/index.php?oldid=262924
+License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+MassTracker selected the beef variant, adapted portion measurements, rewrote
+the instructions and calculated nutrition using the linked ingredient data.

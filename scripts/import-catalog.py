@@ -2,6 +2,7 @@
 import argparse
 import collections
 import csv
+import gzip
 import hashlib
 import io
 import json
@@ -47,9 +48,24 @@ DISHES = dict(zip(
 ))
 DIFFICULTIES = {'easy': 'Простой', 'medium': 'Средний', 'hard': 'Сложный'}
 ATTRIBUTION = 'UniTools — theunitools.com · CC BY-SA 4.0 · адаптация MassTracker'
+UNITOOLS_PAGE = 'https://theunitools.com/data/unitools-recipes-v1.json'
 # UniTools lists whole lemons in Tabule, but the steps use only their juice.
-RECIPE_MEASURES = {('tabbouleh', 'lemon'): (167747, 'lemon yields', 'Сок лимона')}
-CONTEXT_ALIASES = {('souvlaki', 'thick yoghurt'): 'thick whole greek yogurt'}
+RECIPE_MEASURES = {
+    ('tabbouleh', 'lemon'): (167747, 'lemon yields', 'Сок лимона'),
+    ('guacamole', 'lime'): (168156, 'lime yields', 'Сок лайма'),
+    ('lok-lak', 'lime'): (168156, 'lime yields', 'Сок лайма'),
+}
+CONTEXT_ALIASES = {
+    ('souvlaki', 'thick yoghurt'): 'thick whole greek yogurt',
+    # The method cooks the beans for 60–90 minutes before assembling the dish.
+    ('pabellon-criollo', 'black beans'): 'dried black beans',
+}
+# These are separately served toppings whose quantities are unspecified.
+OPTIONAL_TOPPINGS = {
+    ('varenyky-z-vyshnyamy', 'sourcream'),
+    ('pierogi-ruskie', 'sourcream'),
+    ('koettbullar', 'lingonberry'),
+}
 # ICUC's level-spoon measurements for the ground form, distributed by FAO.
 # https://www.fao.org/fileadmin/templates/inpho/documents/AE618e.pdf
 REFERENCE_PORTIONS = {
@@ -57,6 +73,8 @@ REFERENCE_PORTIONS = {
     (170923, '@ground-cumin-tbsp'): 7.5,
     (170922, '@ground-coriander-tsp'): 2.0,
     (170922, '@ground-coriander-tbsp'): 6.0,
+    # USDA SR Legacy: 1 g per US teaspoon of dried oregano leaves.
+    (171328, '@oregano-tbsp'): 3.0,
 }
 
 
@@ -145,6 +163,8 @@ def load_mapping():
 def resolve(item, mapping, products, portions, slug, exact_products):
     name = item['name']['en']
     unit = normalize_unit(item['unit'])
+    if unit == 'toTaste' and (slug, item['id']) in OPTIONAL_TOPPINGS:
+        return None
     if normalize(name) in {'salt', 'sea salt', 'salt and pepper', 'salt for the water', 'black pepper'} and unit in {'toTaste', 'pinch'}:
         return None
     try:
@@ -287,7 +307,7 @@ def convert_recipes(data, mapping, products, portions):
                 searchNames=[row['name']['en']],
                 category=DISHES[row['category']], tags=tags, ingredients=ingredients,
                 servings=servings, prep=prep, cook=cook, difficulty=DIFFICULTIES[row['difficulty']],
-                steps=steps, source=ATTRIBUTION, cuisine=cuisine,
+                steps=steps, source=ATTRIBUTION, sourceUrl=UNITOOLS_PAGE, cuisine=cuisine,
             )
             if omitted:
                 recipe['seasoningNote'] = ('По вкусу, вне расчёта КБЖУ: '
@@ -301,6 +321,69 @@ def convert_recipes(data, mapping, products, portions):
     if missing_legacy:
         raise ValueError(f'Published recipes failed validation: {sorted(missing_legacy)}')
     return accepted, rejected, ingredient_issues, warnings
+
+
+def review_recipes(data, mapping, products, portions, issues, published):
+    """Keep source cooking instructions accessible when nutrition cannot be verified."""
+    cuisines = {c['code']: c['cuisine']['ru'].capitalize() for c in data['countries']}
+    baseline = '\n'.join(p.read_text(encoding='utf-8') for p in RECIPES.glob('library-data*.ts'))
+    names = {normalize(row['name']) for row in published}
+    names.update(normalize(line.split('|')[1]) for line in baseline.splitlines()
+                 if re.match(r'^[a-z0-9-]+\|', line))
+    names.update(normalize(name) for name in re.findall(r"'([^'\n]+)'", baseline))
+    exact_products = collections.defaultdict(list)
+    for product_id, (product_name, _, _) in products.items():
+        exact_products[normalize(product_name)].append(product_id)
+    candidates = []
+    signatures = set()
+    for row in data['recipes']:
+        slug = row['slug']
+        name = row['name']['ru'].strip()
+        title = normalize(name)
+        if slug not in issues or title in names:
+            continue
+        ingredients, unresolved, seasoning = [], [], []
+        signature = tuple(sorted((normalize(item['name']['en']), normalize_unit(item['unit']),
+                                  str(item['quantity'])) for item in row['ingredients']))
+        if signature in signatures:
+            continue
+        for item in row['ingredients']:
+            label = item['name']['ru'].strip()
+            unit = normalize_unit(item['unit'])
+            try:
+                match = resolve(item, mapping, products, portions, slug, exact_products)
+                if match is None:
+                    seasoning.append(label)
+                else:
+                    ingredients.append(match)
+            except (ValueError, KeyError):
+                measure = {'name': label, 'unit': 'по вкусу' if unit == 'toTaste' else UNIT_LABELS.get(unit, unit)}
+                try:
+                    amount, is_range = quantity_value(item['quantity'])
+                    if is_range:
+                        measure['sourceQuantity'] = str(item['quantity']).replace('.', ',')
+                    else:
+                        measure['quantity'] = amount
+                except (ValueError, OverflowError, ZeroDivisionError):
+                    pass
+                unresolved.append(measure)
+        if not ingredients or not unresolved or not all(item['name'] for item in unresolved):
+            continue
+        cuisine = cuisines[row['country']]
+        recipe = dict(id=f'unitools-{slug}', name=name, description=row['summary']['ru'].strip(),
+                      searchNames=[row['name']['en']], category=DISHES[row['category']], tags=[cuisine],
+                      cuisine=cuisine, ingredients=ingredients, unresolvedIngredients=unresolved,
+                      servings=row['baseServings'], prep=row['prepMinutes'], cook=row['cookMinutes'],
+                      difficulty=DIFFICULTIES[row['difficulty']],
+                      steps=[step['text']['ru'].strip() for step in row['steps']],
+                      source=ATTRIBUTION, sourceUrl=UNITOOLS_PAGE)
+        if seasoning:
+            recipe['seasoningNote'] = ('По вкусу, вне расчёта КБЖУ: '
+                                       + ', '.join(dict.fromkeys(seasoning)) + '.')
+        candidates.append(recipe)
+        names.add(title)
+        signatures.add(signature)
+    return candidates
 
 
 def import_wikibooks(cache, mapping, products, portions, existing):
@@ -328,15 +411,21 @@ def import_wikibooks(cache, mapping, products, portions, existing):
             raise ValueError(f'Unverified servings for {row["id"]}')
         if len(translation['steps']) < 2 or normalize(translation['name']) in names:
             raise ValueError(f'Invalid or duplicate translation for {row["id"]}')
-        ingredients = []
+        ingredients, seasoning = [], []
         for measure, (name, label, *range_override) in zip(row['ingredients'], translation['ingredients']):
-            ingredients.append(resolve(
+            matched = resolve(
                 dict(id=normalize(name).replace(' ', ''), name=dict(en=name, ru=label),
                      unit=measure['unit'], quantity=range_override[0] if range_override else measure['qty']),
                 mapping, products, portions, row['id'], {},
-            ))
-        cuisine = {'italian': 'Итальянская кухня', 'polish': 'Польская кухня'}.get(row['cuisine'])
-        imported.append(dict(
+            )
+            if matched is None:
+                seasoning.append(label)
+            else:
+                ingredients.append(matched)
+        cuisine = {'italian': 'Итальянская кухня', 'polish': 'Польская кухня',
+                   'spanish': 'Испанская кухня', 'russian': 'Русская кухня'}.get(row['cuisine'])
+        cuisine = translation.get('cuisine', cuisine)
+        recipe = dict(
             id=row['id'].replace('plwb:', 'wikibooks-pl-'),
             name=translation['name'], description=translation['description'],
             searchNames=[provenance['title'].split('/', 1)[-1]],
@@ -346,12 +435,37 @@ def import_wikibooks(cache, mapping, products, portions, existing):
             **({'cuisine': cuisine} if cuisine else {}),
             source=f'Авторы польского Wikibooks · {provenance["url"]} · редакция {provenance["revision"]} · '
                    'Open Recipe Corpus · CC BY-SA 4.0 · перевод и пересчёт MassTracker',
-        ))
+            sourceUrl=f'https://pl.wikibooks.org/w/index.php?oldid={provenance["revision"]}',
+        )
+        if seasoning:
+            recipe['seasoningNote'] = ('По вкусу, вне расчёта КБЖУ: '
+                                       + ', '.join(dict.fromkeys(seasoning)) + '.')
+        imported.append(recipe)
         names.add(normalize(translation['name']))
     if translations:
         raise ValueError(f'Missing Wikibooks records: {list(translations)}')
     counters['accepted'] = len(imported)
     return imported, dict(counters)
+
+
+def import_regional_wikibooks(products, existing):
+    imported = []
+    names = {normalize(row['name']) for row in existing}
+    ids = {row['id'] for row in existing}
+    for row in records(ROOT / 'scripts/catalog-wikibooks-regional.jsonl'):
+        name, recipe_id = normalize(row['name']), row['id']
+        if (not name or name in names or recipe_id in ids or not row['description']
+                or len(row['steps']) < 2 or not type(row['servings']) is int or row['servings'] <= 0
+                or not re.fullmatch(r'https://ru\.wikibooks\.org/w/index\.php\?oldid=\d+', row['sourceUrl'])
+                or 'CC BY-SA 4.0' not in row['source']):
+            raise ValueError(f'Invalid reviewed recipe: {recipe_id}')
+        for key, grams, *_ in row['ingredients']:
+            if not math.isfinite(grams) or grams <= 0 or (key.startswith('fdc-') and int(key[4:]) not in products):
+                raise ValueError(f'Invalid ingredient reference in {recipe_id}: {key}')
+        imported.append(row)
+        names.add(name)
+        ids.add(recipe_id)
+    return imported
 
 
 def select_products(products, localized_names, recipes):
@@ -375,6 +489,22 @@ def write_module(path, declaration, rows):
                       for row in rows)
     path.write_text(f'// Generated by scripts/import-catalog.py.\n{declaration} [\n{payload}];\n',
                     encoding='utf-8', newline='\n')
+
+
+def write_recipe_pack(rows):
+    payload = json.dumps(rows, ensure_ascii=False, separators=(',', ':')).encode()
+    archive = gzip.compress(payload, mtime=0)
+    version = hashlib.sha256(archive).hexdigest()
+    directory = ROOT / 'public/catalog/recipe-expansion'
+    directory.mkdir(parents=True, exist_ok=True)
+    filename = f'{version}.json.gz'
+    (directory / filename).write_bytes(archive)
+    manifest = dict(path=f'recipe-expansion/{filename}', version=version, rowsSha256=hashlib.sha256(payload).hexdigest(),
+                    bytes=len(archive), rawBytes=len(payload), count=len(rows))
+    (RECIPES / 'library-expansion-manifest.ts').write_text(
+        '// Generated by scripts/import-catalog.py.\n// prettier-ignore\nexport const recipeExpansion = '
+        + json.dumps(manifest, indent=2) + ' as const;\n', encoding='utf-8', newline='\n')
+    return manifest
 
 
 def build_report(recipes, rejected, issues, warnings, products, localized_names):
@@ -422,9 +552,15 @@ def main():
         data = json.load(stream)
     recipes, rejected, issues, warnings = convert_recipes(data, mapping, products, portions)
     wikibooks, corpus_report = import_wikibooks(args.cache, mapping, products, portions, recipes)
-    foods = select_products(products, localized_names, [*recipes, *wikibooks])
+    regional = import_regional_wikibooks(products, [*recipes, *wikibooks])
+    wikibooks.extend(regional)
+    review = review_recipes(data, mapping, products, portions, issues, [*recipes, *wikibooks])
+    foods = select_products(products, localized_names, [*recipes, *wikibooks, *review])
     report = build_report(recipes, rejected, issues, warnings, products, localized_names)
     report['openRecipeCorpus'] = corpus_report
+    report['reviewedRegionalWikibooks'] = len(regional)
+    report['incompleteUniToolsRecipes'] = len(review)
+    report['incompleteCuisines'] = collections.Counter(row['cuisine'] for row in review)
     report['localizedExpansionProducts'] = sum(bool(re.search('[А-Яа-яЁё]', row[1])) for row in foods)
     write_module(FOOD / 'catalog-usda-expansion.ts',
                  "// USDA ARS FoodData Central, SR Legacy (04/2018), CC0 1.0.\n"
@@ -436,13 +572,15 @@ def main():
                  "import type { LibraryRecipeData } from './library-types';\n\n"
                  "// prettier-ignore\nexport const unitoolsRecipes: readonly LibraryRecipeData[] =", recipes)
     write_module(RECIPES / 'library-wikibooks.ts',
-                 "// Adapted from Polish Wikibooks via Open Recipe Corpus. CC BY-SA 4.0.\n"
+                 "// Adapted from Wikibooks and Open Recipe Corpus. CC BY-SA 4.0.\n"
                  "import type { LibraryRecipeData } from './library-types';\n\n"
                  "// prettier-ignore\nexport const wikibooksRecipes: readonly LibraryRecipeData[] =", wikibooks)
+    report['recipeExpansion'] = write_recipe_pack(review)
     (args.cache / 'rejected.json').write_text(json.dumps(rejected, ensure_ascii=False, indent=2), encoding='utf-8')
     (args.cache / 'catalog-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'Expansion: {len(foods)} products, {len(recipes)} UniTools recipes, '
-          f'{len(wikibooks)} Wikibooks recipes. Rejected {len(rejected)} UniTools recipes.')
+          f'{len(wikibooks)} Wikibooks recipes, {len(review)} recipes without complete nutrition. '
+          f'Rejected {len(rejected) - len(review)} UniTools recipes.')
 
 
 if __name__ == '__main__':

@@ -8,10 +8,16 @@ import {
   searchFoods,
   validateProduct,
   validBarcode,
+  barcodeKey,
+  normalizeScannedBarcode,
   sameBarcode,
+  entryNutrition,
+  gramsFor,
   makeEntry,
   unitsFor,
 } from '@/features/food/domain';
+import { makeIngredient } from '@/features/recipes/domain';
+import { diaryCost } from '@/features/smart/planning';
 
 const food = () => ({
   ...builtinFoods[0],
@@ -89,4 +95,35 @@ test('UPC-A и EAN-13 с ведущим нулём обозначают один
       '0036000291452',
     ),
   ).toHaveLength(1);
+});
+
+test('GTIN-14 сохраняет ведущие нули, а камера различает UPC-E и EAN-8', () => {
+  expect(barcodeKey('036000291452')).toBe('00036000291452');
+  expect(barcodeKey('00036000291452')).toBe(barcodeKey('0036000291452'));
+  expect(barcodeKey('10012345678902')).toBe('10012345678902');
+  expect(barcodeKey('10012345678903')).toBeNull();
+  expect(normalizeScannedBarcode('04252614', 'upc_e')).toBe('042100005264');
+  expect(normalizeScannedBarcode('96385074', 'ean8')).toBe('96385074');
+  expect(normalizeScannedBarcode('04252614', 'ean8')).toBeNull();
+  expect(normalizeScannedBarcode('0036000291452', 'upc_a')).toBe(
+    '0036000291452',
+  );
+  expect(normalizeScannedBarcode('036000291452', 'ean13')).toBe('036000291452');
+  expect(normalizeScannedBarcode('00010016', 'ean8')).toBe('00010016');
+  expect(normalizeScannedBarcode('00010016', 'upc_e')).toBe('000100001006');
+  expect(barcodeKey('04252614')).toBe('00042100005264');
+});
+
+test('объёмная порция сохраняется в мл и остаётся неизвестной для учёта массы и цен', () => {
+  const product = { ...food(), baseUnit: 'ml' as const, servingMl: 250 };
+  expect(unitsFor(product)).toEqual(['ml', 'serving']);
+  expect(portion(product, 125, 'ml').calories).toBe(437.5);
+  const entry = makeEntry(product, 0.5, 'serving', 'snack', '2026-11-26');
+  expect(entry).toMatchObject({ grams: null, milliliters: 125 });
+  expect(entryNutrition(entry).calories).toBe(437.5);
+  expect(() => gramsFor(product, 125, 'ml')).toThrow();
+  expect(() => makeIngredient(product, 125, 'g')).toThrow();
+  expect(
+    diaryCost([entry], { [product.id]: { grams: 250, amount: 100 } }),
+  ).toEqual({ amount: 0, unknown: 1 });
 });

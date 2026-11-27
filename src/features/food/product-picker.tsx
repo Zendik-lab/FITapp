@@ -11,13 +11,19 @@ import {
 } from '@/components/form-controls';
 import { radii, spacing, useAppTheme } from '@/theme';
 import { useFoodDiary } from './food-context';
-import { searchFoods } from './domain';
+import { barcodeKey, searchFoods } from './domain';
 import type { FoodProduct } from './model';
 import { NutritionValues } from './nutrition-values';
 import { useDebouncedSearch } from './use-debounced-search';
 import { rememberProductQuery } from './operations';
 import { ActionNotice, type ActionMessage } from '@/components/action-notice';
 import { describeError } from '@/database/storage-diagnostics';
+import { CatalogProductResults } from '@/features/catalog/catalog-product-results';
+import { ProductCatalogFilters } from '@/features/catalog/product-catalog-filters';
+import {
+  matchesCatalogFilters,
+  type CatalogFilters,
+} from '@/features/catalog/catalog-service';
 
 type Section = 'search' | 'recent' | 'frequent' | 'favorite' | 'custom';
 const PAGE_SIZE = 20;
@@ -42,6 +48,7 @@ export function ProductPicker({
   extra,
   selectedIds,
   onlineResults,
+  acceptProduct,
 }: {
   onProduct(product: FoodProduct): void;
   label?: string;
@@ -49,6 +56,7 @@ export function ProductPicker({
   extra?(query: string, section: Section): ReactNode;
   selectedIds?: readonly string[];
   onlineResults?: readonly FoodProduct[];
+  acceptProduct?(product: FoodProduct): boolean;
 }) {
   const session = useFoodDiary();
   const [query, setQuery] = useState('');
@@ -56,6 +64,12 @@ export function ProductPicker({
   const searching = query !== search;
   const [section, setSection] = useState<Section>('search');
   const [category, setCategory] = useState('');
+  const [extraFilters, setExtraFilters] = useState<CatalogFilters>({});
+  const [offlineOnly, setOfflineOnly] = useState(false);
+  const filters = useMemo(
+    () => ({ ...extraFilters, category }),
+    [extraFilters, category],
+  );
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [sort, setSort] = useState<(typeof sorts)[number]['value']>('default');
@@ -66,6 +80,15 @@ export function ProductPicker({
   const recent = session?.state.recent;
   const favorites = session?.state.favorites;
   const entries = session?.state.entries;
+  const used = useMemo(() => {
+    const snapshots = new Map<string, FoodProduct>();
+    if (section === 'recent' || section === 'frequent') {
+      for (const entry of entries ?? []) {
+        if (!entry.recipe) snapshots.set(entry.product.id, entry.product);
+      }
+    }
+    return snapshots;
+  }, [entries, section]);
   const frequency = useMemo(() => {
     const counts = new Map<string, number>();
     if (section === 'frequent')
@@ -77,12 +100,14 @@ export function ProductPicker({
   }, [entries, section]);
   const online = useMemo(
     () =>
-      section === 'search'
+      section === 'search' && !offlineOnly
         ? (onlineResults ?? []).filter(
-            (product) => !category || product.category === category,
+            (product) =>
+              matchesCatalogFilters(product, filters) &&
+              (!acceptProduct || acceptProduct(product)),
           )
         : [],
-    [section, onlineResults, category],
+    [section, onlineResults, filters, offlineOnly, acceptProduct],
   );
   const categories = useMemo(
     () =>
@@ -95,7 +120,9 @@ export function ProductPicker({
     let source = products ?? [];
     if (section === 'recent') {
       const byId = new Map(source.map((product) => [product.id, product]));
-      source = (recent ?? []).flatMap((id) => byId.get(id.productId) ?? []);
+      source = (recent ?? []).flatMap(
+        (id) => byId.get(id.productId) ?? used.get(id.productId) ?? [],
+      );
     }
     if (section === 'favorite') {
       const ids = new Set(favorites?.map((favorite) => favorite.productId));
@@ -103,21 +130,28 @@ export function ProductPicker({
     }
     if (section === 'custom')
       source = source.filter((product) => product.isCustom);
-    if (section === 'frequent')
-      source = source
-        .filter((product) => frequency.has(product.id))
-        .sort(
-          (a, b) => (frequency.get(b.id) ?? 0) - (frequency.get(a.id) ?? 0),
-        );
-    const visibleOnline = new Set(online.map((product) => product.id));
+    if (section === 'frequent') {
+      const byId = new Map(source.map((product) => [product.id, product]));
+      source = [...frequency.entries()]
+        .sort(([, left], [, right]) => right - left)
+        .flatMap(([id]) => byId.get(id) ?? used.get(id) ?? []);
+    }
+    const seen = new Set(
+      online.map((product) => barcodeKey(product.barcode ?? '') ?? product.id),
+    );
     const result = searchFoods(
       source.filter(
         (product) =>
-          (!category || product.category === category) &&
-          !visibleOnline.has(product.id),
+          matchesCatalogFilters(product, filters) &&
+          (!acceptProduct || acceptProduct(product)),
       ),
       search,
-    );
+    ).filter((product) => {
+      const key = barcodeKey(product.barcode ?? '') ?? product.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     if (sort === 'name')
       result.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
     if (sort === 'protein')
@@ -131,11 +165,22 @@ export function ProductPicker({
     favorites,
     search,
     section,
-    category,
+    filters,
     online,
     sort,
     frequency,
+    used,
+    acceptProduct,
   ]);
+  const excluded = useMemo(
+    () =>
+      new Set(
+        [...found, ...online].map(
+          (product) => barcodeKey(product.barcode ?? '') ?? product.id,
+        ),
+      ),
+    [found, online],
+  );
   const pageCount = Math.max(1, Math.ceil(found.length / PAGE_SIZE));
   const page = Math.min(pageIndex, pageCount - 1);
   const start = page * PAGE_SIZE;
@@ -235,7 +280,16 @@ export function ProductPicker({
           }}
         />
       )}
-      {extra?.(query, section)}
+      <ProductCatalogFilters
+        filters={filters}
+        offlineOnly={offlineOnly}
+        onApply={(next, onlyOffline) => {
+          setExtraFilters(next);
+          setOfflineOnly(onlyOffline);
+          setPageIndex(0);
+        }}
+      />
+      {!offlineOnly && extra?.(query, section)}
       <PrimaryButton
         secondary
         label="Сортировка продуктов"
@@ -277,7 +331,7 @@ export function ProductPicker({
       )}
       {found.length === 0 && !session?.loading && !searching && (
         <AppText tone="muted">
-          Продукты не найдены. Измените запрос, раздел или создайте продукт.
+          Во встроенном каталоге и сохранённых продуктах совпадений нет.
         </AppText>
       )}
       {!searching && pageCount > 1 && (
@@ -316,6 +370,23 @@ export function ProductPicker({
               onProduct={select}
             />
           ))}
+      {section === 'search' && !searching && (
+        <CatalogProductResults
+          key={JSON.stringify([search, filters])}
+          query={search}
+          filters={filters}
+          excluded={excluded}
+          accept={acceptProduct}
+          renderProduct={(product) => (
+            <ProductRow
+              key={product.id}
+              product={product}
+              selected={selectedIds?.includes(product.id)}
+              onProduct={select}
+            />
+          )}
+        />
+      )}
     </>
   );
 }
@@ -351,7 +422,10 @@ const ProductRow = memo(function ProductRow({
             .filter(Boolean)
             .join(' · ')}
         </AppText>
-        <NutritionValues caption="На 100 г" values={product.per100} />
+        <NutritionValues
+          caption={product.baseUnit === 'ml' ? 'На 100 мл' : 'На 100 г'}
+          values={product.per100}
+        />
       </View>
       <AppIcon name={selected ? 'Check' : 'ChevronRight'} size={18} />
     </Touchable>

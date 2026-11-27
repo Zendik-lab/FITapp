@@ -131,7 +131,12 @@ export function diaryCost(
               prices,
             )
           : { amount: 0, unknown: 1 }
-        : estimateCost([{ id: entry.product.id, grams: entry.grams }], prices);
+        : entry.grams === null
+          ? { amount: 0, unknown: 1 }
+          : estimateCost(
+              [{ id: entry.product.id, grams: entry.grams }],
+              prices,
+            );
       return {
         amount: sum.amount + estimate.amount,
         unknown: sum.unknown + estimate.unknown,

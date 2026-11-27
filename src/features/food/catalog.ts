@@ -2,6 +2,8 @@ import { categories, type FoodProduct } from './model';
 import { fdcRows } from './catalog-usda';
 import { fdcExpansion } from './catalog-usda-expansion';
 import { legacyAliases } from './catalog-aliases';
+import { catalogCore } from './catalog-core-data';
+import { unpackCatalogProduct } from '@/features/catalog/catalog-format';
 
 // Approximate reference values per 100 g edible part; cooking and brands change them.
 // General composition reference: USDA FoodData Central / SR Legacy (public domain).
@@ -197,8 +199,9 @@ const fdcFoods: FoodProduct[] = [...fdcRows, ...fdcExpansion].map(
   }),
 );
 
-export const builtinFoodCatalogVersion = 3;
+export const builtinFoodCatalogVersion = 4;
 export const builtinFoods: readonly FoodProduct[] = [
   ...legacyFoods,
   ...fdcFoods,
+  ...catalogCore.map((row) => unpackCatalogProduct(row, 'off')),
 ];

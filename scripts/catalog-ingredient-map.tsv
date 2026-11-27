@@ -43,7 +43,7 @@ cornflour	maize flour|corn flour	170290	Мука кукурузная цельн
 cornstarch|cornflour	cornstarch|cornflour	169698	Крахмал кукурузный		@cup/48	@cup/16	
 icingsugar|powderedsugar|sugar	icing sugar|powdered sugar	169656	Сахарная пудра		tsp	tbsp unsifted	
 walnuts	walnuts	170187	Орех грецкий (USDA)				
-oregano	dried oregano|oregano	171328	Орегано сушёный		tsp, leaves		
+oregano	dried oregano|oregano	171328	Орегано сушёный		tsp, leaves	@oregano-tbsp	-
 cinnamon	cinnamon|ground cinnamon	171320	Корица молотая		tsp	tbsp	
 water|coldwater	water|warm water|cold water|boiling water|water for the dough|iced water|iced water for the filling|hot water	builtin-110			@water	@water	@water
 ice	crushed ice|ice	builtin-110					
@@ -182,7 +182,7 @@ kefir|matsoni	matsoni or kefir	170904					cup:236.5882365
 *	chicken broth	174536	Куриный бульон готовый		@cup/48	@cup/16	cup:236.5882365
 *	capers	172238	Каперсы консервированные без заливки			tbsp, drained	-
 *	green peas|peas	170419	Зелёный горошек сырой				-
-*	dried oregano	171328	Орегано сушёный		tsp, leaves		-
+*	dried oregano	171328	Орегано сушёный		tsp, leaves	@oregano-tbsp	-
 *	saffron	170934	Шафран		tsp	tbsp	-
 *	ground nutmeg	171326	Мускатный орех молотый		tsp	tbsp	-
 *	ground cinnamon	171320	Корица молотая		tsp	tbsp	-
@@ -195,7 +195,7 @@ kefir|matsoni	matsoni or kefir	170904					cup:236.5882365
 *	fish sauce	174531	Соус рыбный			tbsp	tbsp:14.78676478125
 *	sauerkraut	169279	Капуста квашеная с рассолом				-
 *	green beans	169961	Фасоль стручковая зелёная сырая				-
-*	dried apricots	173941	Курага	half			-
+*	dried apricots	173941	Курага с сульфитами	half			-
 *	prunes	168162	Чернослив без косточек	prune, pitted			-
 *	dates	171726	Финики Деглет Нур без косточек	date, pitted			-
 *	gruyère|gruyere	171242	Сыр грюйер	slice (1 oz)			-
@@ -252,3 +252,11 @@ starch	cornflour	169698			@cup/48	@cup/16	-
 *	heavy whipping cream	170859	Сливки 36% (USDA)		@cup/48	tbsp	fl oz:29.5735295625
 *	ground cumin|cumin powder	170923			@ground-cumin-tsp	@ground-cumin-tbsp	-
 *	ground coriander	170922			@ground-coriander-tsp	@ground-coriander-tbsp	-
+# Scoped additions. State-specific items use only a confirmed physical form.
+yogurt	Bulgarian yoghurt	171284	Натуральный йогурт из цельного молока	-	-	-	cup (8 fl oz):236.5882365
+chestnuts	chestnuts	170575	Каштаны сырые очищенные	-	-	-	-
+orangezest	orange zest	169103	Цедра апельсина	-	tsp	tbsp	-
+chillies|chili	sun-dried chillies|dried chillies	168570	Перец чили сушёный	pepper	-	-	-
+anchovy|anchovies	anchovies in oil|tinned anchovies in oil	174183	Анчоусы консервированные в масле, без заливки	anchovies	-	-	-
+bay|bayleaf	ground bay leaf	170917	Лавровый лист молотый	-	-	-	-
+grass|lemongrass	fresh lemongrass	168573	Лемонграсс свежий	-	-	-	-

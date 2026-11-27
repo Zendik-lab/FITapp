@@ -163,13 +163,15 @@ export function FilterPanel({
       ? 'Введите неотрицательное число.'
       : undefined;
   };
-  const badRange = (['Calories', 'Fat', 'Carbs'] as const).some((item) => {
-    const min = draft[`min${item}`];
-    const max = draft[`max${item}`];
-    return (
-      !!min?.trim() && !!max?.trim() && parseDecimal(min) > parseDecimal(max)
-    );
-  });
+  const badRange = (['Calories', 'Protein', 'Fat', 'Carbs'] as const).some(
+    (item) => {
+      const min = draft[`min${item}`];
+      const max = draft[`max${item}`];
+      return (
+        !!min?.trim() && !!max?.trim() && parseDecimal(min) > parseDecimal(max)
+      );
+    },
+  );
   return (
     <View style={styles.fields}>
       <AppText variant="section" accessibilityRole="header">

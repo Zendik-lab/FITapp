@@ -4,7 +4,7 @@ import {
   newId,
   parseDateKey,
   validateProduct,
-  sameBarcode,
+  productMatchesBarcode,
 } from './domain';
 import { normalizeSearch } from './local-search';
 import type {
@@ -18,10 +18,15 @@ import type {
 export function saveProduct(state: FoodState, product: FoodProduct): FoodState {
   const errors = validateProduct(product).errors;
   if (errors.length) throw new Error(errors.join(' '));
+  const codes = [
+    ...(product.barcode ? [product.barcode] : []),
+    ...(product.barcodes ?? []),
+  ];
   if (
-    product.barcode &&
     state.products.some(
-      (p) => p.id !== product.id && sameBarcode(p.barcode, product.barcode),
+      (p) =>
+        p.id !== product.id &&
+        codes.some((code) => productMatchesBarcode(p, code)),
     )
   )
     throw new Error('Продукт с таким штрихкодом уже сохранён.');
