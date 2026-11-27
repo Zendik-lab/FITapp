@@ -10,6 +10,7 @@ import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
 import { Dialog } from '@/components/dialog';
+import { AnimatedNumber } from '@/components/animated-number';
 import {
   ChoiceGroup,
   FormField,
@@ -245,7 +246,10 @@ export function CalculatorScreen({
                 Рекомендуемая суточная калорийность
               </AppText>
               <AppText variant="metric">
-                {formatNumber(recommendation.calories)} ккал
+                <AnimatedNumber
+                  value={recommendation.calories}
+                  suffix=" ккал"
+                />
               </AppText>
               <AppText tone="muted">
                 {profile ? goalLabels[profile.goals.kind] : ''}
@@ -430,23 +434,22 @@ export function CalculatorScreen({
           disabled={disabled}
           onPress={() => (dirty ? setDiscard(true) : onClose(false))}
         />
-        {discard && (
-          <Dialog
-            title="Отменить изменения?"
-            onDismiss={() => setDiscard(false)}
-          >
-            <AppText>Изменения целей питания не будут сохранены.</AppText>
-            <PrimaryButton
-              label="Продолжить редактирование"
-              onPress={() => setDiscard(false)}
-            />
-            <PrimaryButton
-              secondary
-              label="Отменить изменения"
-              onPress={() => onClose(false)}
-            />
-          </Dialog>
-        )}
+        <Dialog
+          open={discard}
+          title="Отменить изменения?"
+          onDismiss={() => setDiscard(false)}
+        >
+          <AppText>Изменения целей питания не будут сохранены.</AppText>
+          <PrimaryButton
+            label="Продолжить редактирование"
+            onPress={() => setDiscard(false)}
+          />
+          <PrimaryButton
+            secondary
+            label="Отменить изменения"
+            onPress={() => onClose(false)}
+          />
+        </Dialog>
       </FormScreen>
     </FieldFocusContext>
   );
@@ -469,7 +472,9 @@ function TargetsCard({
   return (
     <Card>
       <SectionHeader title={title} />
-      <AppText variant="stat">{formatNumber(targets.calories)} ккал</AppText>
+      <AppText variant="stat">
+        <AnimatedNumber value={targets.calories} suffix=" ккал" />
+      </AppText>
       <View
         style={styles.track}
         accessible
@@ -486,13 +491,18 @@ function TargetsCard({
         ({ key, label }) =>
           key !== 'calories' && (
             <AppText key={key}>
-              {label.replace(', г', '')} · {formatNumber(targets[key])} г ·{' '}
-              {formatNumber(distribution[key])}%
+              {label.replace(', г', '')} ·{' '}
+              <AnimatedNumber value={targets[key]} suffix=" г" /> ·{' '}
+              <AnimatedNumber value={distribution[key]} suffix="%" />
             </AppText>
           ),
       )}
       <AppText variant="caption" tone="muted">
-        Энергия БЖУ: {formatNumber(calculateMacroCalories(targets))} ккал
+        <AnimatedNumber
+          prefix="Энергия БЖУ: "
+          value={calculateMacroCalories(targets)}
+          suffix=" ккал"
+        />
       </AppText>
     </Card>
   );

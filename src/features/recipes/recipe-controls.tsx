@@ -1,10 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  AccessibilityInfo,
-  Animated,
-  Platform,
-  type TextInputInstance,
-} from 'react-native';
+import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
 import {
@@ -35,52 +30,20 @@ export function RecipeNutrition({
   onChange(mode: NutritionMode): void;
   allowEstimatedPer100?: boolean;
 }) {
-  const [opacity] = useState(() => new Animated.Value(1));
-  const [reduceMotion, setReduceMotion] = useState(true);
   const values = nutrition?.[mode];
-  const { calories, protein, fat, carbs } = values ?? {};
-  useEffect(() => {
-    let mounted = true;
-    const subscription = AccessibilityInfo.addEventListener(
-      'reduceMotionChanged',
-      setReduceMotion,
-    );
-    void AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
-      if (mounted) setReduceMotion(reduced);
-    });
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
-  useEffect(() => {
-    if (reduceMotion) return;
-    opacity.setValue(0.78);
-    const animation = Animated.timing(opacity, {
-      toValue: 1,
-      duration: 160,
-      useNativeDriver: Platform.OS !== 'web',
-    });
-    animation.start();
-    return () => {
-      animation.stop();
-      opacity.setValue(1);
-    };
-  }, [calories, protein, fat, carbs, mode, opacity, reduceMotion]);
   return (
     <Card>
       <AppText variant="section">Пищевая ценность</AppText>
       {values ? (
-        <Animated.View style={{ opacity }}>
-          <NutritionValues
-            values={values}
-            caption={
-              mode === 'per100' && nutrition?.estimated
-                ? 'Приблизительно, по суммарной массе ингредиентов'
-                : undefined
-            }
-          />
-        </Animated.View>
+        <NutritionValues
+          animate
+          values={values}
+          caption={
+            mode === 'per100' && nutrition?.estimated
+              ? 'Приблизительно, по суммарной массе ингредиентов'
+              : undefined
+          }
+        />
       ) : (
         <AppText tone="muted">
           Для расчёта нужны ингредиенты, количество порций и корректный вес,
@@ -89,6 +52,7 @@ export function RecipeNutrition({
       )}
       <ChoiceGroup
         label="Режим расчёта"
+        compact
         value={mode}
         options={
           nutrition?.estimated && !allowEstimatedPer100

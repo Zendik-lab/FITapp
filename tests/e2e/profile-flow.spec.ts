@@ -121,24 +121,32 @@ test('быстрый ввод двух полей одним пакетом пе
 }) => {
   await page.goto(url);
   await page.getByRole('button', { name: 'Начать', exact: true }).click();
-  await expect(page.getByLabel('Дата рождения', { exact: true })).toBeVisible();
-  await page.evaluate(() => {
-    const setValue = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      'value',
-    )?.set;
-    if (!setValue) throw new Error('Missing input setter');
-    for (const [id, value] of [
-      ['birthDate', '01.01.1996'],
-      ['height', '180'],
-    ]) {
-      const input = document.getElementById(id);
-      if (!(input instanceof HTMLInputElement))
-        throw new Error(`Missing ${id}`);
-      setValue.call(input, value);
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  });
+  const birthDate = page.getByLabel('Дата рождения', { exact: true });
+  const height = page.getByLabel('Рост, см', { exact: true });
+  await expect(birthDate).toBeEditable();
+  await expect(height).toBeEditable();
+  await page.evaluate(
+    ({ birthDate, height }) => {
+      const setValue = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      if (!setValue) throw new Error('Missing input setter');
+      for (const [input, value] of [
+        [birthDate, '01.01.1996'],
+        [height, '180'],
+      ] as const) {
+        if (!(input instanceof HTMLInputElement))
+          throw new Error('Expected an editable input');
+        setValue.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    },
+    {
+      birthDate: await birthDate.elementHandle(),
+      height: await height.elementHandle(),
+    },
+  );
   await expect(
     page.getByText('Ответы сохранены на устройстве.', { exact: true }),
   ).toBeVisible();

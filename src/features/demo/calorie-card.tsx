@@ -1,6 +1,7 @@
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/components/app-text';
+import { useAnimatedNumber } from '@/components/animated-number';
 import { Card } from '@/components/card';
 import {
   MacroProgressBar,
@@ -21,6 +22,8 @@ export function CalorieCard({
   const { colors } = useAppTheme();
   const { width, fontScale } = useWindowDimensions();
   const stacked = width < 360 || fontScale > 1.35;
+  const calories = useAnimatedNumber(day.calories);
+  const remaining = useAnimatedNumber(day.calorieGoal - day.calories);
 
   return (
     <Card style={dominant && styles.hero}>
@@ -28,17 +31,20 @@ export function CalorieCard({
         <View style={styles.metrics}>
           <AppText variant="action">Калории</AppText>
           <View>
-            <AppText variant={dominant ? 'metric' : 'stat'}>
-              {formatNumber(day.calories)}
+            <AppText
+              variant={dominant ? 'metric' : 'stat'}
+              accessibilityLabel={formatNumber(day.calories)}
+            >
+              {formatNumber(calories)}
             </AppText>
             <AppText variant="caption" tone="muted">
               ккал из {formatNumber(day.calorieGoal)}
             </AppText>
           </View>
           <AppText variant="caption" tone="accentText">
-            {day.calories > day.calorieGoal
-              ? `На ${formatNumber(day.calories - day.calorieGoal)} ккал больше цели`
-              : `${formatNumber(day.calorieGoal - day.calories)} ккал осталось`}
+            {remaining < 0
+              ? `На ${formatNumber(-remaining)} ккал больше цели`
+              : `${formatNumber(remaining)} ккал осталось`}
           </AppText>
         </View>
         <ProgressRing

@@ -256,6 +256,15 @@ export function progress(consumed: number, goal: number) {
     percent: goal > 0 ? (consumed / goal) * 100 : 0,
   };
 }
+const foodSearchTerms = new WeakMap<
+  FoodProduct,
+  {
+    title: string;
+    name: string[];
+    descriptors: string[];
+  }
+>();
+
 export function searchFoods(
   foods: readonly FoodProduct[],
   query: string,
@@ -263,21 +272,31 @@ export function searchFoods(
   const terms = searchTerms(query);
   if (!terms.length) return [...foods];
   const phrase = normalizeSearch(query);
+  const barcode = query.trim();
   return foods
     .flatMap((food) => {
-      if (sameBarcode(food.barcode, query.trim()))
-        return [{ food, score: 1000 }];
-      const name = searchTerms(food.name);
-      const descriptors = searchTerms(
-        [food.brand, food.barcode, food.category, ...(food.aliases ?? [])].join(
-          ' ',
-        ),
-      );
-      let score = normalizeSearch(food.name) === phrase ? 100 : 0;
+      if (sameBarcode(food.barcode, barcode)) return [{ food, score: 1000 }];
+      let indexed = foodSearchTerms.get(food);
+      if (!indexed) {
+        indexed = {
+          title: normalizeSearch(food.name),
+          name: searchTerms(food.name),
+          descriptors: searchTerms(
+            [
+              food.brand,
+              food.barcode,
+              food.category,
+              ...(food.aliases ?? []),
+            ].join(' '),
+          ),
+        };
+        foodSearchTerms.set(food, indexed);
+      }
+      let score = indexed.title === phrase ? 100 : 0;
       for (const term of terms) {
         const match = Math.max(
-          wordScore(term, name) * 2,
-          wordScore(term, descriptors),
+          wordScore(term, indexed.name) * 2,
+          wordScore(term, indexed.descriptors),
         );
         if (!match) return [];
         score += match;

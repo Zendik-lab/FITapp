@@ -133,23 +133,39 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       const field = document.activeElement?.matches(
         'input, textarea, [contenteditable="true"]',
       );
+      root.toggleAttribute(
+        'data-keyboard-open',
+        !!field &&
+          viewport.scale === 1 &&
+          window.innerHeight - viewport.height > 120,
+      );
       if (field && viewport.scale === 1) {
         root.style.setProperty(
           '--visual-viewport-height',
           `${viewport.height}px`,
         );
+        const obscured = Math.max(
+          0,
+          window.innerHeight - viewport.height - viewport.offsetTop,
+        );
+        root.style.setProperty('--visual-viewport-bottom', `${obscured}px`);
       } else {
         root.style.removeProperty('--visual-viewport-height');
+        root.style.removeProperty('--visual-viewport-bottom');
       }
     };
     viewport.addEventListener('resize', resize);
+    viewport.addEventListener('scroll', resize);
     document.addEventListener('focusin', resize);
     document.addEventListener('focusout', resize);
     return () => {
       viewport.removeEventListener('resize', resize);
+      viewport.removeEventListener('scroll', resize);
       document.removeEventListener('focusin', resize);
       document.removeEventListener('focusout', resize);
       root.style.removeProperty('--visual-viewport-height');
+      root.style.removeProperty('--visual-viewport-bottom');
+      root.removeAttribute('data-keyboard-open');
     };
   }, []);
 
@@ -248,6 +264,10 @@ export function useConfirmPwaStartup() {
       buildId: currentBuild().buildId,
     });
   }, [ready]);
+}
+
+export function useOfflineStatus() {
+  return use(PwaContext)?.offline ?? false;
 }
 
 export function PwaNotices({

@@ -1,14 +1,22 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  memo,
+  useDeferredValue,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { StyleSheet, View, type TextInputInstance } from 'react-native';
 import { AppText } from '@/components/app-text';
+import { AppIcon } from '@/components/app-icon';
+import { Touchable } from '@/components/touchable';
 import { PrimaryButton } from '@/components/buttons';
-import { Card } from '@/components/card';
 import {
   ChoiceGroup,
   FieldFocusContext,
   FormField,
 } from '@/components/form-controls';
-import { spacing } from '@/theme';
+import { radii, spacing, useAppTheme } from '@/theme';
 import { useFoodDiary } from './food-context';
 import { searchFoods } from './domain';
 import type { FoodProduct } from './model';
@@ -40,13 +48,15 @@ export function ProductPicker({
 }) {
   const session = useFoodDiary();
   const [query, setQuery] = useState('');
+  const search = useDeferredValue(query);
   const [section, setSection] = useState<Section>('search');
   const [category, setCategory] = useState('');
   const [categoriesOpen, setCategoriesOpen] = useState(false);
-  const [limit, setLimit] = useState(PAGE_SIZE);
+  const [pageIndex, setPageIndex] = useState(0);
   const fields = useRef(new Map<string, TextInputInstance>());
   const products = session?.products;
-  const state = session?.state;
+  const recent = session?.state.recent;
+  const favorites = session?.state.favorites;
   const online = useMemo(
     () =>
       section === 'search'
@@ -67,15 +77,11 @@ export function ProductPicker({
     let source = products ?? [];
     if (section === 'recent') {
       const byId = new Map(source.map((product) => [product.id, product]));
-      source = (state?.recent ?? []).flatMap(
-        (id) => byId.get(id.productId) ?? [],
-      );
+      source = (recent ?? []).flatMap((id) => byId.get(id.productId) ?? []);
     }
     if (section === 'favorite') {
-      const favorites = new Set(
-        state?.favorites.map((favorite) => favorite.productId),
-      );
-      source = source.filter((product) => favorites.has(product.id));
+      const ids = new Set(favorites?.map((favorite) => favorite.productId));
+      source = source.filter((product) => ids.has(product.id));
     }
     if (section === 'custom')
       source = source.filter((product) => product.isCustom);
@@ -86,14 +92,17 @@ export function ProductPicker({
           (!category || product.category === category) &&
           !visibleOnline.has(product.id),
       ),
-      query,
+      search,
     );
-  }, [products, state, query, section, category, online]);
+  }, [products, recent, favorites, search, section, category, online]);
+  const pageCount = Math.max(1, Math.ceil(found.length / PAGE_SIZE));
+  const page = Math.min(pageIndex, pageCount - 1);
+  const start = page * PAGE_SIZE;
 
   function changeQuery(value: string) {
     setQuery(value);
     onQueryChange?.(value);
-    setLimit(PAGE_SIZE);
+    setPageIndex(0);
   }
   return (
     <>
@@ -117,12 +126,13 @@ export function ProductPicker({
       )}
       <ChoiceGroup
         label="Раздел продуктов"
+        compact
         value={section}
         options={sections}
         onChange={(value) => {
           setSection(value);
           onQueryChange?.(query);
-          setLimit(PAGE_SIZE);
+          setPageIndex(0);
         }}
       />
       <PrimaryButton
@@ -142,7 +152,7 @@ export function ProductPicker({
           onChange={(value) => {
             setCategory(value);
             setCategoriesOpen(false);
-            setLimit(PAGE_SIZE);
+            setPageIndex(0);
           }}
         />
       )}
@@ -161,15 +171,47 @@ export function ProductPicker({
           ))}
         </>
       )}
-      <AppText variant="caption" tone="muted" accessibilityLiveRegion="polite">
-        Найдено локально: {found.length}
-      </AppText>
-      {found.length === 0 && (
+      {!session?.loading && (
+        <AppText
+          variant="caption"
+          tone="muted"
+          accessibilityRole="status"
+          accessibilityLiveRegion="polite"
+        >
+          Найдено локально: {found.length}
+        </AppText>
+      )}
+      {found.length === 0 && !session?.loading && (
         <AppText tone="muted">
           Продукты не найдены. Измените запрос, раздел или создайте продукт.
         </AppText>
       )}
-      {found.slice(0, limit).map((product) => (
+      {pageCount > 1 && (
+        <View style={styles.pager}>
+          <PrimaryButton
+            secondary
+            icon="ChevronLeft"
+            label="Предыдущие продукты"
+            disabled={page === 0}
+            onPress={() => setPageIndex(page - 1)}
+          />
+          <AppText
+            variant="caption"
+            tone="muted"
+            accessibilityLiveRegion="polite"
+          >
+            {page + 1} / {pageCount}
+          </AppText>
+          <PrimaryButton
+            secondary
+            icon="ChevronRight"
+            label="Следующие продукты"
+            disabled={page + 1 === pageCount}
+            onPress={() => setPageIndex(page + 1)}
+          />
+        </View>
+      )}
+      {found.slice(start, start + PAGE_SIZE).map((product) => (
         <ProductRow
           key={product.id}
           product={product}
@@ -177,18 +219,11 @@ export function ProductPicker({
           onProduct={onProduct}
         />
       ))}
-      {found.length > limit && (
-        <PrimaryButton
-          secondary
-          label="Показать ещё продукты"
-          onPress={() => setLimit((n) => n + PAGE_SIZE)}
-        />
-      )}
     </>
   );
 }
 
-function ProductRow({
+const ProductRow = memo(function ProductRow({
   product,
   selected,
   onProduct,
@@ -197,8 +232,21 @@ function ProductRow({
   selected?: boolean;
   onProduct(product: FoodProduct): void;
 }) {
+  const { colors } = useAppTheme();
   return (
-    <Card>
+    <Touchable
+      accessibilityRole="button"
+      accessibilityLabel={(selected ? 'Убрать: ' : 'Выбрать: ') + product.name}
+      accessibilityState={{ selected }}
+      onPress={() => onProduct(product)}
+      style={({ pressed }) => [
+        styles.product,
+        {
+          backgroundColor:
+            selected || pressed ? colors.accentSurface : colors.surface,
+        },
+      ]}
+    >
       <View style={styles.title}>
         <AppText variant="action">{product.name}</AppText>
         <AppText variant="caption" tone="muted">
@@ -206,15 +254,26 @@ function ProductRow({
             .filter(Boolean)
             .join(' · ')}
         </AppText>
+        <NutritionValues caption="На 100 г" values={product.per100} />
       </View>
-      <NutritionValues caption="На 100 г" values={product.per100} />
-      <PrimaryButton
-        secondary
-        label={(selected ? 'Убрать: ' : 'Выбрать: ') + product.name}
-        onPress={() => onProduct(product)}
-      />
-    </Card>
+      <AppIcon name={selected ? 'Check' : 'ChevronRight'} size={18} />
+    </Touchable>
   );
-}
+});
 
-const styles = StyleSheet.create({ title: { gap: spacing.tight } });
+const styles = StyleSheet.create({
+  title: { flex: 1, minWidth: 0, gap: spacing.tight },
+  product: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.compact,
+    gap: spacing.compact,
+    borderRadius: radii.action,
+  },
+  pager: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.small,
+  },
+});

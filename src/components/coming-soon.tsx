@@ -13,12 +13,10 @@ export function ComingSoonProvider({ children }: { children: ReactNode }) {
   return (
     <ComingSoonContext value={setTitle}>
       {children}
-      {title && (
-        <Dialog title={title} onDismiss={dismiss}>
-          <AppText tone="muted">Эта функция ещё разрабатывается.</AppText>
-          <PrimaryButton label="Понятно" onPress={dismiss} />
-        </Dialog>
-      )}
+      <Dialog open={!!title} title={title ?? ''} onDismiss={dismiss}>
+        <AppText tone="muted">Эта функция ещё разрабатывается.</AppText>
+        <PrimaryButton label="Понятно" onPress={dismiss} />
+      </Dialog>
     </ComingSoonContext>
   );
 }

@@ -67,7 +67,7 @@ export function deleteRecipe(
 }
 
 export function recipeIsFavorite(
-  state: FoodState,
+  state: Pick<FoodState, 'favoriteRecipeIds'>,
   recipe: Pick<Recipe, 'id' | 'isFavorite'>,
 ) {
   return isBuiltinRecipe(recipe.id)

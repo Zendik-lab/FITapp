@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Touchable } from '@/components/touchable';
+import { StyleSheet, View } from 'react-native';
 
 import { spacing, touchSize, useAppTheme } from '@/theme';
 
@@ -20,7 +21,7 @@ export function SettingsRow({
 }) {
   const { colors } = useAppTheme();
   return (
-    <Pressable
+    <Touchable
       accessibilityRole="button"
       accessibilityLabel={value ? [label, value].join(', ') : label}
       onPress={onPress}
@@ -49,7 +50,7 @@ export function SettingsRow({
         </View>
         <AppIcon name="ChevronRight" size={12} color={colors.muted} />
       </View>
-    </Pressable>
+    </Touchable>
   );
 }
 

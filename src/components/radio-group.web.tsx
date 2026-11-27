@@ -2,7 +2,7 @@ import type { KeyboardEvent } from 'react';
 import { spacing } from '@/theme';
 import type { RadioGroupProps } from './radio-group';
 
-export function RadioGroup({ label, children }: RadioGroupProps) {
+export function RadioGroup({ label, children, compact }: RadioGroupProps) {
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!(event.target instanceof HTMLElement)) return;
     const current = event.target.closest<HTMLElement>('[role="radio"]');
@@ -30,7 +30,12 @@ export function RadioGroup({ label, children }: RadioGroupProps) {
       role="radiogroup"
       aria-label={label}
       onKeyDown={onKeyDown}
-      style={{ display: 'flex', flexDirection: 'column', gap: spacing.small }}
+      style={{
+        display: 'flex',
+        flexDirection: compact ? 'row' : 'column',
+        flexWrap: compact ? 'wrap' : 'nowrap',
+        gap: spacing.small,
+      }}
     >
       {children}
     </div>

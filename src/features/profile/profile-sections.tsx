@@ -58,37 +58,36 @@ export function ProfileSections({
         onPress={() => setConfirm(true)}
         secondary
       />
-      {confirm && (
-        <Dialog
-          title="Пройти анкетирование заново?"
-          onDismiss={() => {
-            if (!session.pending) setConfirm(false);
-          }}
-        >
-          <AppText>
-            Текущий профиль подставится в ответы. Остальные данные и настройки
-            сохранятся.
+      <Dialog
+        open={confirm}
+        title="Пройти анкетирование заново?"
+        onDismiss={() => {
+          if (!session.pending) setConfirm(false);
+        }}
+      >
+        <AppText>
+          Текущий профиль подставится в ответы. Остальные данные и настройки
+          сохранятся.
+        </AppText>
+        {session.failure && (
+          <AppText tone="error" accessibilityRole="alert">
+            {session.failure}
           </AppText>
-          {session.failure && (
-            <AppText tone="error" accessibilityRole="alert">
-              {session.failure}
-            </AppText>
-          )}
-          <PrimaryButton
-            label={session.pending ? 'Сохраняем…' : 'Начать заново'}
-            disabled={session.pending}
-            onPress={() => {
-              void session.restart().catch(() => {});
-            }}
-          />
-          <PrimaryButton
-            label="Отмена"
-            disabled={session.pending}
-            onPress={() => setConfirm(false)}
-            secondary
-          />
-        </Dialog>
-      )}
+        )}
+        <PrimaryButton
+          label={session.pending ? 'Сохраняем…' : 'Начать заново'}
+          disabled={session.pending}
+          onPress={() => {
+            void session.restart().catch(() => {});
+          }}
+        />
+        <PrimaryButton
+          label="Отмена"
+          disabled={session.pending}
+          onPress={() => setConfirm(false)}
+          secondary
+        />
+      </Dialog>
     </>
   );
 }

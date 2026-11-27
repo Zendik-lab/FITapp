@@ -1,4 +1,7 @@
 const locale = 'ru-KZ';
+const numberFormat = new Intl.NumberFormat(locale, {
+  maximumFractionDigits: 1,
+});
 
 export function localDay(date: Date) {
   return addDays(date, 0);
@@ -26,5 +29,5 @@ export function formatDate(date: Date, options: Intl.DateTimeFormatOptions) {
 }
 
 export function formatNumber(value: number) {
-  return value.toLocaleString(locale, { maximumFractionDigits: 1 });
+  return numberFormat.format(value);
 }

@@ -179,7 +179,7 @@ function searchCandidates(index: readonly IndexedRecipe[], terms: string[]) {
 export function buildRecipeIndex(
   recipes: Iterable<RecipeIndexInput>,
   products: readonly FoodProduct[],
-  state: FoodState,
+  state: Pick<FoodState, 'entries' | 'favoriteRecipeIds'>,
 ): IndexedRecipe[] {
   const byId = new Map(products.map((product) => [product.id, product]));
   const ingredientWordCache = new Map<string, readonly string[]>();

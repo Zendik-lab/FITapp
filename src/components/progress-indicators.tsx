@@ -5,6 +5,7 @@ import { formatNumber } from '@/features/calendar/calendar';
 import { spacing, useAppTheme } from '@/theme';
 
 import { AppText } from './app-text';
+import { useAnimatedNumber } from './animated-number';
 
 export function ProgressRing({
   value,
@@ -17,6 +18,7 @@ export function ProgressRing({
 }) {
   const { colors } = useAppTheme();
   const ratio = goal > 0 ? Math.max(0, value / goal) : 0;
+  const displayRatio = useAnimatedNumber(ratio);
   const stroke = 9;
   const center = size / 2;
   const radius = center - stroke / 2;
@@ -36,7 +38,7 @@ export function ProgressRing({
           strokeWidth={stroke}
           fill="none"
         />
-        {ratio > 0 && (
+        {displayRatio > 0 && (
           <Circle
             cx={center}
             cy={center}
@@ -46,7 +48,7 @@ export function ProgressRing({
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - Math.min(1, ratio))}
+            strokeDashoffset={circumference * (1 - Math.min(1, displayRatio))}
             rotation={-90}
             originX={center}
             originY={center}
@@ -60,7 +62,7 @@ export function ProgressRing({
         accessibilityElementsHidden
       >
         <AppText variant="stat" maxFontSizeMultiplier={1.4}>
-          {Math.round(ratio * 100)}%
+          {Math.round(displayRatio * 100)}%
         </AppText>
       </View>
     </View>
@@ -79,7 +81,10 @@ export function MacroProgressBar({
   tone: 'protein' | 'fat' | 'carbs' | 'water';
 }) {
   const { colors } = useAppTheme();
-  const ratio = goal > 0 ? Math.min(1, Math.max(0, value / goal)) : 0;
+  const display = useAnimatedNumber(value);
+  const ratio = useAnimatedNumber(
+    goal > 0 ? Math.min(1, Math.max(0, value / goal)) : 0,
+  );
   return (
     <View
       style={styles.macro}
@@ -93,12 +98,13 @@ export function MacroProgressBar({
         <View
           style={[
             styles.track,
-            { backgroundColor: colors[tone], width: `${ratio * 100}%` },
+            styles.fill,
+            { backgroundColor: colors[tone], transform: [{ scaleX: ratio }] },
           ]}
         />
       </View>
       <AppText variant="caption">
-        {formatNumber(value)} / {formatNumber(goal)}{' '}
+        {formatNumber(display)} / {formatNumber(goal)}{' '}
         {tone === 'water' ? 'л' : 'г'}
       </AppText>
     </View>
@@ -112,5 +118,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   macro: { flex: 1, minWidth: 74, gap: spacing.tight },
-  track: { height: 5, borderRadius: 3 },
+  track: { height: 5, borderRadius: 3, overflow: 'hidden' },
+  fill: { transformOrigin: 'left center' },
 });

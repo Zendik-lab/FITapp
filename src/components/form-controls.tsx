@@ -2,12 +2,12 @@ import {
   createContext,
   use,
   useCallback,
+  useId,
   useState,
   type ReactNode,
   type RefObject,
 } from 'react';
 import {
-  Pressable,
   Platform,
   StyleSheet,
   TextInput,
@@ -18,6 +18,7 @@ import {
 import { AppText } from './app-text';
 import { AppIcon } from './app-icon';
 import { RadioGroup } from './radio-group';
+import { Touchable } from './touchable';
 import { radii, spacing, touchSize, typography, useAppTheme } from '@/theme';
 
 export const FieldFocusContext = createContext<RefObject<
@@ -32,6 +33,8 @@ export function FormField({
   hint,
   inputMode,
   keyboardType,
+  onFocus,
+  onBlur,
   ...props
 }: TextInputProps & {
   name: string;
@@ -40,9 +43,11 @@ export function FormField({
   hint?: string;
 }) {
   const { colors } = useAppTheme();
+  const id = useId();
   const fields = use(FieldFocusContext);
   const disabled = use(FormDisabledContext);
   const [ready, setReady] = useState(Platform.OS !== 'web');
+  const [focused, setFocused] = useState(false);
   const registerField = useCallback(
     (input: TextInputInstance | null) => {
       // The ref's commit update flushes RN Web's passive selection restore
@@ -55,14 +60,10 @@ export function FormField({
     [fields, name],
   );
   const numericInput = inputMode === 'numeric' || inputMode === 'decimal';
-  const descriptionId = error
-    ? `${name}-error`
-    : hint
-      ? `${name}-hint`
-      : undefined;
+  const descriptionId = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   return (
     <View style={styles.group}>
-      <AppText nativeID={`${name}-label`} variant="action">
+      <AppText nativeID={`${id}-label`} variant="action">
         {label}
       </AppText>
       <TextInput
@@ -80,32 +81,45 @@ export function FormField({
         autoCorrect={!numericInput}
         autoCapitalize={numericInput ? 'none' : 'sentences'}
         spellCheck={!numericInput}
-        nativeID={name}
+        nativeID={id}
         accessibilityLabel={label}
-        aria-labelledby={`${name}-label`}
+        aria-labelledby={`${id}-label`}
         aria-describedby={descriptionId}
         aria-invalid={!!error}
         placeholderTextColor={colors.muted}
+        selectionColor={colors.accentText}
+        onFocus={(event) => {
+          setFocused(true);
+          onFocus?.(event);
+        }}
+        onBlur={(event) => {
+          setFocused(false);
+          onBlur?.(event);
+        }}
         maxLength={1000}
         style={[
           styles.input,
           {
             color: colors.text,
-            backgroundColor: colors.surface,
-            borderColor: error ? colors.error : colors.border,
+            backgroundColor: disabled ? colors.background : colors.surface,
+            borderColor: error
+              ? colors.error
+              : focused
+                ? colors.accentText
+                : colors.controlBorder,
           },
           props.multiline && styles.multiline,
         ]}
         {...props}
       />
       {hint && (
-        <AppText nativeID={`${name}-hint`} variant="caption" tone="muted">
+        <AppText nativeID={`${id}-hint`} variant="caption" tone="muted">
           {hint}
         </AppText>
       )}
       {error && (
         <AppText
-          nativeID={`${name}-error`}
+          nativeID={`${id}-error`}
           tone="error"
           accessibilityRole="alert"
         >
@@ -122,21 +136,23 @@ export function ChoiceGroup<T extends string>({
   options,
   onChange,
   error,
+  compact = false,
 }: {
   label: string;
   value: T | '';
   options: readonly { value: T; label: string; description?: string }[];
   onChange: (value: T) => void;
   error?: string;
+  compact?: boolean;
 }) {
   const { colors } = useAppTheme();
   const disabled = use(FormDisabledContext);
   return (
     <View style={styles.group}>
       <AppText variant="action">{label}</AppText>
-      <RadioGroup label={label}>
+      <RadioGroup label={label} compact={compact}>
         {options.map((option, index) => (
-          <Pressable
+          <Touchable
             key={option.value}
             accessibilityRole="radio"
             accessibilityLabel={option.label}
@@ -151,6 +167,7 @@ export function ChoiceGroup<T extends string>({
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [
               styles.choice,
+              compact && styles.compactChoice,
               {
                 backgroundColor:
                   value === option.value || pressed
@@ -161,8 +178,10 @@ export function ChoiceGroup<T extends string>({
               },
             ]}
           >
-            <View style={styles.choiceText}>
-              <AppText variant="action">{option.label}</AppText>
+            <View style={compact ? styles.compactText : styles.choiceText}>
+              <AppText variant={compact ? 'caption' : 'action'}>
+                {option.label}
+              </AppText>
               {option.description && (
                 <AppText variant="caption" tone="muted">
                   {option.description}
@@ -170,7 +189,7 @@ export function ChoiceGroup<T extends string>({
               )}
             </View>
             {value === option.value && <AppIcon name="Check" />}
-          </Pressable>
+          </Touchable>
         ))}
       </RadioGroup>
       {error && (
@@ -207,4 +226,10 @@ const styles = StyleSheet.create({
     gap: spacing.small,
   },
   choiceText: { flex: 1, gap: spacing.tight },
+  compactChoice: {
+    maxWidth: '100%',
+    paddingHorizontal: spacing.compact,
+    paddingVertical: spacing.small,
+  },
+  compactText: { flexShrink: 1 },
 });

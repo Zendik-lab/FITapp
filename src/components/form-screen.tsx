@@ -1,17 +1,16 @@
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, type ReactNode, type RefObject } from 'react';
 import {
-  AccessibilityInfo,
-  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   type ScrollViewInstance,
 } from 'react-native';
-import { spacing, useAppTheme } from '@/theme';
+import { contentWidth, spacing, useAppTheme } from '@/theme';
 import { PwaNotices, useUpdateBlocker } from '@/features/pwa/pwa-status';
 import { FormDisabledContext } from './form-controls';
 import { ScreenSafeArea } from './screen-safe-area';
+import { SceneTransition } from './screen-stack';
 
 export function useBeforeUnload(enabled: boolean) {
   useEffect(() => {
@@ -44,27 +43,10 @@ export function FormScreen({
 }) {
   useUpdateBlocker(!readOnly || blockUpdate);
   const { isDark } = useAppTheme();
-  const [opacity] = useState(() => new Animated.Value(1));
   useBeforeUnload(blockUpdate);
   useEffect(() => {
     scrollRef.current?.scrollTo({ y: 0, animated: false });
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
-      if (active && !reduced) {
-        opacity.setValue(0);
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 180,
-          useNativeDriver: Platform.OS !== 'web',
-        }).start();
-      }
-    });
-    return () => {
-      active = false;
-      opacity.stopAnimation();
-      opacity.setValue(1);
-    };
-  }, [transitionKey, opacity, scrollRef]);
+  }, [transitionKey, scrollRef]);
   return (
     <ScreenSafeArea bottomInset={!withinTabs}>
       <KeyboardAvoidingView
@@ -81,15 +63,12 @@ export function FormScreen({
           indicatorStyle={isDark ? 'white' : 'black'}
           contentContainerStyle={styles.content}
         >
-          <Animated.View
-            testID="form-content"
-            style={[styles.body, { opacity }]}
-          >
+          <SceneTransition transitionKey={transitionKey} style={styles.body}>
             <PwaNotices blockUpdate={blockUpdate} />
             <FormDisabledContext value={disabled}>
               {children}
             </FormDisabledContext>
-          </Animated.View>
+          </SceneTransition>
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenSafeArea>
@@ -101,7 +80,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     width: '100%',
-    maxWidth: 640,
+    maxWidth: contentWidth,
     alignSelf: 'center',
     padding: spacing.medium,
     paddingBottom: spacing.section,

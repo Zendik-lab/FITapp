@@ -48,7 +48,7 @@ export function ProductDetail({
   date: string;
   meal: MealType;
   onBack(): void;
-  onSaved(): void;
+  onSaved(message: string, destination: string): void;
   onEdit(product: FoodProduct): void;
 }) {
   const session = useFoodDiary();
@@ -74,33 +74,38 @@ export function ProductDetail({
   } catch {
     /* Invalid text remains editable; save reports correction. */
   }
-  async function perform(action: () => Promise<void>, close = false) {
+  async function perform(action: () => Promise<void>, message?: string) {
     setFailure('');
     try {
       await action();
-      if (close) onSaved();
+      if (message) onSaved(message, date);
     } catch (error) {
       setFailure(describeError(error));
     }
   }
   async function save(copy = false) {
     if (!session) return;
-    await perform(async () => {
-      parseDateKey(selectedDate);
-      const value = parseDecimal(amount);
-      const created = makeEntry(
-        product,
-        value,
-        unit,
-        selectedMeal,
-        selectedDate,
-      );
-      await session.change((s) =>
-        entry && !copy
-          ? editEntry(s, entry.id, value, unit, selectedMeal, selectedDate)
-          : addEntry(s, created),
-      );
-    }, true);
+    await perform(
+      async () => {
+        parseDateKey(selectedDate);
+        const value = parseDecimal(amount);
+        const created = makeEntry(
+          product,
+          value,
+          unit,
+          selectedMeal,
+          selectedDate,
+        );
+        await session.change((s) =>
+          entry && !copy
+            ? editEntry(s, entry.id, value, unit, selectedMeal, selectedDate)
+            : addEntry(s, created),
+        );
+      },
+      entry && !copy
+        ? 'Запись питания обновлена.'
+        : 'Продукт добавлен в дневник.',
+    );
   }
   return (
     <FoodForm
@@ -165,7 +170,7 @@ export function ProductDetail({
       )}
       {values && (
         <Card>
-          <NutritionValues values={values} caption="В порции" />
+          <NutritionValues animate values={values} caption="В порции" />
         </Card>
       )}
       <FormField
@@ -239,42 +244,40 @@ export function ProductDetail({
           />
         </>
       )}
-      {confirm && (
-        <Dialog
-          title={
-            confirm === 'entry' ? 'Удалить запись?' : 'Удалить свой продукт?'
-          }
-          onDismiss={() => setConfirm(null)}
-        >
-          <AppText>
-            {confirm === 'entry'
-              ? 'Запись будет удалена из выбранного дня.'
-              : 'Исторические записи останутся без изменений.'}
-          </AppText>
-          <PrimaryButton
-            secondary
-            label="Отмена"
-            disabled={session?.pending}
-            onPress={() => setConfirm(null)}
-          />
-          <PrimaryButton
-            label="Подтвердить удаление"
-            disabled={session?.pending}
-            onPress={() => {
-              if (session)
-                void perform(
-                  () =>
-                    session.change((s) =>
-                      confirm === 'entry' && entry
-                        ? removeEntry(s, entry.id)
-                        : deleteProduct(s, product.id),
-                    ),
-                  true,
-                );
-            }}
-          />
-        </Dialog>
-      )}
+      <Dialog
+        open={!!confirm}
+        dismissible={!session?.pending}
+        title={!!entry ? 'Удалить запись?' : 'Удалить свой продукт?'}
+        onDismiss={() => setConfirm(null)}
+      >
+        <AppText>
+          {!!entry
+            ? 'Запись будет удалена из выбранного дня.'
+            : 'Исторические записи останутся без изменений.'}
+        </AppText>
+        <PrimaryButton
+          secondary
+          label="Отмена"
+          disabled={session?.pending}
+          onPress={() => setConfirm(null)}
+        />
+        <PrimaryButton
+          label="Подтвердить удаление"
+          disabled={session?.pending}
+          onPress={() => {
+            if (session)
+              void perform(
+                () =>
+                  session.change((s) =>
+                    confirm === 'entry' && entry
+                      ? removeEntry(s, entry.id)
+                      : deleteProduct(s, product.id),
+                  ),
+                entry ? 'Запись удалена.' : 'Продукт удалён.',
+              );
+          }}
+        />
+      </Dialog>
     </FoodForm>
   );
 }

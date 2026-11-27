@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState, Platform } from 'react-native';
 import { getSettingsStorage } from '@/database/settings-storage';
 import { createFoodRepository } from '@/database/repositories/food';
@@ -14,6 +14,10 @@ export function FoodProvider({ children }: { children: ReactNode }) {
 }
 function StoredFood({ children }: { children: ReactNode }) {
   const [state, setState] = useState(emptyFoodState);
+  const products = useMemo(
+    () => [...builtinFoods, ...state.products],
+    [state.products],
+  );
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -68,7 +72,7 @@ function StoredFood({ children }: { children: ReactNode }) {
     <FoodContext
       value={{
         state,
-        products: [...builtinFoods, ...state.products],
+        products,
         loading,
         pending,
         failure,

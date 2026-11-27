@@ -236,6 +236,50 @@ test('тема сообщает выбранный вариант и подде�
   await expect(appearance).toBeFocused();
 });
 
+test('календарь учитывает уменьшенное движение, жест и возврат фокуса', async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await seed(page);
+  await page.goto(`${url}/nutrition`);
+  const trigger = page.getByRole('button', { name: /^\d{1,2} \p{L}+ \d{4}/u });
+  const sheet = page.getByRole('dialog', { name: 'Выберите дату' });
+  await trigger.click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toHaveCSS('animation-name', 'none');
+  await expectNoHorizontalOverflow(page);
+  const day = await sheet
+    .getByRole('button', { name: /^1 \p{L}+ /u })
+    .boundingBox();
+  expect(day?.width).toBeGreaterThanOrEqual(40);
+  expect(day?.height).toBeGreaterThanOrEqual(44);
+  await page.keyboard.press('Escape');
+  await expect(trigger).toBeFocused();
+
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await trigger.click();
+  await expect(sheet).toHaveCSS('animation-name', 'dialog-in');
+  await expect(sheet).toHaveCSS('opacity', '1');
+  const bounds = await sheet.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y + bounds!.height).toBeCloseTo(560, 0);
+  await page.screenshot({ path: info.outputPath('calendar-320.png') });
+  const handle = await sheet.locator('.app-sheet-handle').boundingBox();
+  expect(handle).not.toBeNull();
+  await page.mouse.move(
+    handle!.x + handle!.width / 2,
+    handle!.y + handle!.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + 80, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
 test('загрузка и ошибка профиля доступны на низком экране', async ({
   page,
   browser,
@@ -356,7 +400,7 @@ test('ошибка нижнего поля редактора оставляет
   expect(rect.y + rect.height).toBeLessThanOrEqual(tab.y);
 });
 
-for (const width of [320, 375, 390, 393, 414, 430, 1280]) {
+for (const width of [320, 375, 390, 393, 414, 430, 768, 1280]) {
   test(`все вкладки: ширина ${width}, прокрутка и сохранение состояния`, async ({
     page,
     browserName,

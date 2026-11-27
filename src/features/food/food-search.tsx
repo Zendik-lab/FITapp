@@ -4,6 +4,7 @@ import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
 import { describeError } from '@/database/storage-diagnostics';
 import { spacing } from '@/theme';
+import { useOfflineStatus } from '@/features/pwa/pwa-status';
 import { FoodForm } from './food-form';
 import { useFoodDiary } from './food-context';
 import { sameBarcode } from './domain';
@@ -12,13 +13,17 @@ import { saveProduct } from './operations';
 import { ProductPicker } from './product-picker';
 import type { FoodProduct } from './model';
 
+const noResults: readonly FoodProduct[] = [];
+
 export function FoodSearch({
+  active,
   onBack,
   onProduct,
   onCreate,
   onScan,
   onRecipes,
 }: {
+  active: boolean;
   onBack(): void;
   onProduct(product: FoodProduct): void;
   onCreate(): void;
@@ -26,6 +31,7 @@ export function FoodSearch({
   onRecipes?(): void;
 }) {
   const session = useFoodDiary();
+  const offline = useOfflineStatus();
   const latest = useRef(session);
   useEffect(() => {
     latest.current = session;
@@ -36,19 +42,26 @@ export function FoodSearch({
   } | null>(null);
   const [network, setNetwork] = useState(false);
   const [message, setMessage] = useState('');
-  const [onlineResults, setOnlineResults] = useState<readonly FoodProduct[]>(
-    [],
-  );
+  const [onlineResults, setOnlineResults] =
+    useState<readonly FoodProduct[]>(noResults);
+  const [wasActive, setWasActive] = useState(active);
+  if (wasActive !== active) {
+    setWasActive(active);
+    if (!active) {
+      setSubmitted(null);
+      setNetwork(false);
+    }
+  }
   useEffect(() => {
-    if (!submitted) return;
-    let active = true;
+    if (!active || !submitted) return;
+    let currentRequest = true;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       setNetwork(true);
       void offClient
         .search(submitted.query, controller.signal)
         .then(async (result) => {
-          if (!active) return;
+          if (!currentRequest) return;
           const current = latest.current;
           let saved: FoodProduct[] = [];
           if (current && result.products.length) {
@@ -71,7 +84,7 @@ export function FoodSearch({
               return next;
             });
           }
-          if (active) {
+          if (currentRequest) {
             setOnlineResults(saved);
             setMessage(
               [
@@ -92,26 +105,26 @@ export function FoodSearch({
           }
         })
         .catch((error: unknown) => {
-          if (active) setMessage(describeError(error));
+          if (currentRequest) setMessage(describeError(error));
         })
         .finally(() => {
-          if (active) setNetwork(false);
+          if (currentRequest) setNetwork(false);
         });
     }, 500);
     return () => {
-      active = false;
+      currentRequest = false;
       clearTimeout(timer);
       controller.abort();
     };
-  }, [submitted]);
+  }, [active, submitted]);
   function resetSearch() {
     setSubmitted(null);
     setNetwork(false);
     setMessage('');
-    setOnlineResults([]);
+    setOnlineResults(noResults);
   }
   return (
-    <FoodForm title="Добавить продукт" onBack={onBack}>
+    <FoodForm readOnly={!active} title="Добавить продукт" onBack={onBack}>
       <View style={styles.actions}>
         {onRecipes && (
           <PrimaryButton
@@ -146,16 +159,21 @@ export function FoodSearch({
                 secondary
                 label={network ? 'Поиск онлайн…' : 'Найти в Open Food Facts'}
                 disabled={
-                  network || !!session?.pending || query.trim().length < 3
+                  offline ||
+                  network ||
+                  !!session?.pending ||
+                  query.trim().length < 3
                 }
                 onPress={() => {
                   setMessage('');
-                  setOnlineResults([]);
+                  setOnlineResults(noResults);
                   setSubmitted({ query, id: Date.now() });
                 }}
               />
               <AppText variant="caption" tone="muted">
-                Результаты Open Food Facts могут требовать проверки этикетки.
+                {offline
+                  ? 'Локальный поиск доступен. Для Open Food Facts нужен интернет.'
+                  : 'Сверяйте данные Open Food Facts с этикеткой продукта.'}
               </AppText>
               {!!message && (
                 <AppText accessibilityLiveRegion="polite">{message}</AppText>

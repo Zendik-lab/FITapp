@@ -1,6 +1,6 @@
+import { Touchable } from '@/components/touchable';
 import { useState } from 'react';
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -51,7 +51,7 @@ export function DateSelector({
           onPress={() => onChange(addDays(date, daily ? -1 : -7))}
           compact
         />
-        <Pressable
+        <Touchable
           accessibilityRole="button"
           accessibilityLabel={formatDate(date, shortDate)}
           accessibilityHint={
@@ -66,7 +66,7 @@ export function DateSelector({
           <AppText variant="action" style={styles.center}>
             {formatDate(date, shortDate)}
           </AppText>
-        </Pressable>
+        </Touchable>
         <IconButton
           label={daily ? 'Следующий день' : 'Следующая неделя'}
           icon="ChevronRight"
@@ -83,7 +83,7 @@ export function DateSelector({
           const selected = sameDay(day, date);
           const currentDay = sameDay(day, today);
           return (
-            <Pressable
+            <Touchable
               key={day.getTime()}
               accessibilityRole="button"
               accessibilityState={{ selected }}
@@ -126,12 +126,13 @@ export function DateSelector({
                   },
                 ]}
               />
-            </Pressable>
+            </Touchable>
           );
         })}
       </ScrollView>
-      {calendar && (
+      {daily && (
         <CalendarPicker
+          open={calendar}
           date={date}
           today={today}
           onChange={onChange}

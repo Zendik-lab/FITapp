@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { Touchable } from '@/components/touchable';
+import { StyleSheet } from 'react-native';
 
 import { radii, spacing, touchSize, useAppTheme } from '@/theme';
 
@@ -22,7 +23,7 @@ export function PrimaryButton({
   const { colors } = useAppTheme();
   const tone = secondary ? 'accentText' : 'onAccent';
   return (
-    <Pressable
+    <Touchable
       accessibilityRole="button"
       accessibilityState={{ disabled, expanded }}
       aria-expanded={expanded}
@@ -40,7 +41,7 @@ export function PrimaryButton({
       <AppText variant="action" tone={tone} style={styles.label}>
         {label}
       </AppText>
-    </Pressable>
+    </Touchable>
   );
 }
 
@@ -56,7 +57,7 @@ export function IconButton({
 }) {
   const { colors } = useAppTheme();
   return (
-    <Pressable
+    <Touchable
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
@@ -70,7 +71,7 @@ export function IconButton({
       ]}
     >
       <AppIcon name={icon} size={compact ? 16 : 20} />
-    </Pressable>
+    </Touchable>
   );
 }
 

@@ -10,6 +10,7 @@ const light = {
   secondaryText: '#8E8E93',
   accent: '#34C759',
   border: '#E5E5EA',
+  controlBorder: '#85858F',
   muted: '#59595F',
   accentText: '#13642C',
   accentSurface: '#E4F6EA',
@@ -28,6 +29,7 @@ const dark: typeof light = {
   secondaryText: '#98989D',
   accent: '#30D158',
   border: '#38383A',
+  controlBorder: '#797980',
   muted: '#A7A7AF',
   accentText: '#66DF83',
   accentSurface: '#183524',
@@ -40,8 +42,18 @@ const dark: typeof light = {
 };
 
 export const typography = {
-  title: { fontSize: 34, fontWeight: '700', letterSpacing: -0.8 },
-  section: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  title: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '700',
+    letterSpacing: -0.8,
+  },
+  section: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
   metric: {
     fontSize: 38,
     fontWeight: '700',
@@ -54,9 +66,9 @@ export const typography = {
     letterSpacing: -0.5,
     fontVariant: ['tabular-nums'],
   },
-  body: { fontSize: 16 },
-  action: { fontSize: 16, fontWeight: '600' },
-  caption: { fontSize: 13 },
+  body: { fontSize: 16, lineHeight: 22 },
+  action: { fontSize: 16, lineHeight: 21, fontWeight: '600' },
+  caption: { fontSize: 13, lineHeight: 17 },
   tab: { fontSize: 10, fontWeight: '600' },
 } satisfies Record<string, TextStyle>;
 
@@ -70,6 +82,8 @@ export const spacing = {
 };
 export const radii = { action: 16, card: 20, hero: 24 };
 export const touchSize = 44;
+export const contentWidth = 640;
+export const dialogWidth = 400;
 
 export function useAppTheme() {
   const mode = use(AppSettingsContext)?.settings.themeMode ?? 'system';

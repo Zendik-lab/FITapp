@@ -157,6 +157,7 @@ export function RecipeLog({
         <AppText variant="section">{name}</AppText>
         {portion && (
           <NutritionValues
+            animate
             caption="В выбранном количестве"
             values={portion.values}
           />
@@ -237,8 +238,13 @@ export function RecipeLog({
           />
         </>
       )}
-      {entry && confirm && (
-        <Dialog title="Удалить запись?" onDismiss={() => setConfirm(false)}>
+      {entry && (
+        <Dialog
+          open={confirm}
+          dismissible={!session?.pending}
+          title="Удалить запись?"
+          onDismiss={() => setConfirm(false)}
+        >
           <AppText>Блюдо будет удалено из выбранного дня.</AppText>
           <PrimaryButton
             secondary

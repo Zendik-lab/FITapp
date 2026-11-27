@@ -13,6 +13,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
 export const PwaNotices: ComponentType<{ blockUpdate?: boolean }> = () => null;
 
 export const useUpdateBlocker: (enabled?: boolean) => void = () => {};
+export const useOfflineStatus = () => false;
 export function useConfirmPwaStartup() {}
 
 export function AppVersionSection() {

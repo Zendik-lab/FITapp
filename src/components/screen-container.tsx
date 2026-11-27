@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 
 import { PwaNotices } from '@/features/pwa/pwa-status';
-import { spacing, useAppTheme } from '@/theme';
+import { contentWidth, spacing, useAppTheme } from '@/theme';
 import { ScreenSafeArea } from './screen-safe-area';
 
 export function ScreenContainer({ children }: { children: ReactNode }) {
@@ -26,11 +26,11 @@ const styles = StyleSheet.create({
   content: {
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 640,
+    maxWidth: contentWidth,
     paddingHorizontal: spacing.medium,
     paddingTop: spacing.compact,
     paddingBottom: spacing.section,
     gap: spacing.large,
   },
-  narrow: { paddingHorizontal: spacing.tight },
+  narrow: { paddingHorizontal: spacing.small },
 });

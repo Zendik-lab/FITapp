@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { AppText } from '@/components/app-text';
+import { ScreenStack } from '@/components/screen-stack';
 import { IconButton, PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
 import { ChoiceGroup } from '@/components/form-controls';
@@ -110,17 +111,18 @@ export function RecipeFlow({
   const [error, setError] = useState('');
   const state = session?.state ?? empty;
   const products = session?.products ?? noProducts;
+  const { recipes, entries, favoriteRecipeIds } = state;
   const index = useMemo(
     () =>
       buildRecipeIndex(
         (function* () {
-          yield* state.recipes;
+          yield* recipes;
           yield* builtinRecipeSearchInputs();
         })(),
         products,
-        state,
+        { entries, favoriteRecipeIds },
       ),
-    [products, state],
+    [products, recipes, entries, favoriteRecipeIds],
   );
   const remaining = useMemo(() => {
     if (!goals) return undefined;
@@ -198,90 +200,93 @@ export function RecipeFlow({
   function open(recipe: Pick<Recipe, 'id'>) {
     setPage({ kind: 'detail', id: recipe.id });
   }
-  if (page.kind === 'create' || page.kind === 'edit') {
-    const original = page.kind === 'edit' ? page.original : undefined;
-    return (
-      <RecipeEditor
-        key={original?.id ?? 'new'}
-        original={original}
-        onBack={() => (original ? open(original) : list())}
-        onSaved={(recipe) =>
-          choose && !original
-            ? setPage({ kind: 'log', original: recipe })
-            : open(recipe)
-        }
-      />
-    );
-  }
-  if (page.kind === 'detail' && selected) {
-    return (
-      <RecipeDetail
-        key={selected.id}
-        recipe={selected}
-        available={pantry?.length ? pantry : undefined}
-        ignoreBasics={ignoreBasics}
-        onBack={() => list()}
-        onList={list}
-        onEdit={() => setPage({ kind: 'edit', original: selected })}
-        onAdd={() =>
-          setPage({ kind: 'log', original: selected, fromDetail: true })
-        }
-      />
-    );
-  }
-  if (page.kind === 'log') {
-    return (
-      <RecipeLog
-        recipe={page.original}
-        date={date}
-        meal={meal}
-        onBack={() => (page.fromDetail ? open(page.original) : list())}
-        onSaved={onLogged}
-      />
-    );
-  }
-  if (page.kind === 'create-product') {
-    const { target } = page;
-    return (
-      <ProductEditor
-        onBack={() => setPage({ kind: 'pick', target })}
-        onSaved={(product) => {
-          setIngredient(target, product.id);
-          setPage({ kind: 'pick', target });
-        }}
-      />
-    );
-  }
-  if (page.kind === 'pick') {
-    const { target } = page;
-    const ids = (target === 'pantry' ? pantry : filters[target]) ?? [];
-    return (
-      <FoodForm title={pickerTitles[target]} onBack={() => list()}>
-        <View style={styles.row}>
-          {ids.map((id) => (
-            <ToggleChip
-              key={id}
-              active
-              label={
-                (products.find((product) => product.id === id)?.name ?? id) +
-                ' ×'
-              }
-              onPress={() => setIngredient(target, id)}
-            />
-          ))}
-        </View>
-        <PrimaryButton label="Готово" onPress={() => list()} />
-        <PrimaryButton
-          secondary
-          label="Создать продукт"
-          onPress={() => setPage({ kind: 'create-product', target })}
+  function renderDetail() {
+    if (page.kind === 'create' || page.kind === 'edit') {
+      const original = page.kind === 'edit' ? page.original : undefined;
+      return (
+        <RecipeEditor
+          key={original?.id ?? 'new'}
+          original={original}
+          onBack={() => (original ? open(original) : list())}
+          onSaved={(recipe) =>
+            choose && !original
+              ? setPage({ kind: 'log', original: recipe })
+              : open(recipe)
+          }
         />
-        <ProductPicker
-          selectedIds={ids}
-          onProduct={(product) => setIngredient(target, product.id)}
+      );
+    }
+    if (page.kind === 'detail' && selected) {
+      return (
+        <RecipeDetail
+          key={selected.id}
+          recipe={selected}
+          available={pantry?.length ? pantry : undefined}
+          ignoreBasics={ignoreBasics}
+          onBack={() => list()}
+          onList={list}
+          onEdit={() => setPage({ kind: 'edit', original: selected })}
+          onAdd={() =>
+            setPage({ kind: 'log', original: selected, fromDetail: true })
+          }
         />
-      </FoodForm>
-    );
+      );
+    }
+    if (page.kind === 'log') {
+      return (
+        <RecipeLog
+          recipe={page.original}
+          date={date}
+          meal={meal}
+          onBack={() => (page.fromDetail ? open(page.original) : list())}
+          onSaved={onLogged}
+        />
+      );
+    }
+    if (page.kind === 'create-product') {
+      const { target } = page;
+      return (
+        <ProductEditor
+          onBack={() => setPage({ kind: 'pick', target })}
+          onSaved={(product) => {
+            setIngredient(target, product.id);
+            setPage({ kind: 'pick', target });
+          }}
+        />
+      );
+    }
+    if (page.kind === 'pick') {
+      const { target } = page;
+      const ids = (target === 'pantry' ? pantry : filters[target]) ?? [];
+      return (
+        <FoodForm title={pickerTitles[target]} onBack={() => list()}>
+          <View style={styles.row}>
+            {ids.map((id) => (
+              <ToggleChip
+                key={id}
+                active
+                label={
+                  (products.find((product) => product.id === id)?.name ?? id) +
+                  ' ×'
+                }
+                onPress={() => setIngredient(target, id)}
+              />
+            ))}
+          </View>
+          <PrimaryButton label="Готово" onPress={() => list()} />
+          <PrimaryButton
+            secondary
+            label="Создать продукт"
+            onPress={() => setPage({ kind: 'create-product', target })}
+          />
+          <ProductPicker
+            selectedIds={ids}
+            onProduct={(product) => setIngredient(target, product.id)}
+          />
+        </FoodForm>
+      );
+    }
+    return null;
   }
   const active = Object.keys(filters).some((key) => {
     const value = filters[key as keyof RecipeFilters];
@@ -299,362 +304,366 @@ export function RecipeFlow({
           : 'Не хватает трёх или более ингредиентов';
 
   return (
-    <FoodForm
-      readOnly
-      title={choose ? 'Выбрать рецепт' : 'Рецепты'}
-      onBack={onClose}
-      error={
-        error ||
-        (page.kind === 'detail' ? 'Рецепт больше недоступен.' : undefined)
-      }
-    >
-      {!!notice && <AppText accessibilityLiveRegion="polite">{notice}</AppText>}
-      <SearchField
-        name="recipe-query"
-        label="Поиск рецептов"
-        value={query}
-        onChange={setSearch}
-        onSubmit={() => remember(query)}
-      />
-      {!query && (
-        <View style={styles.row}>
-          {(state.recipeSearchHistory?.length
-            ? state.recipeSearchHistory
-            : quickQueries
-          ).map((term) => (
-            <ToggleChip
-              key={term}
-              label={term}
-              active={false}
-              onPress={() => {
-                setSearch(term);
-                remember(term);
-              }}
-            />
-          ))}
-          {!!state.recipeSearchHistory?.length && (
-            <ToggleChip
-              label="Очистить историю"
-              active={false}
-              onPress={() =>
-                void change((current) => ({
-                  ...current,
-                  recipeSearchHistory: [],
-                }))
-              }
-            />
-          )}
-        </View>
-      )}
-      <View style={styles.row}>
-        {sections.map(({ value, label }) => (
-          <ToggleChip
-            key={value}
-            label={label}
-            active={section === value}
-            onPress={() => {
-              setSection(value);
-              setPageIndex(0);
-            }}
-          />
-        ))}
-      </View>
-      <CategoryStrip
-        categories={filters.categories ?? []}
-        onChange={(categories) => setFilterValues({ ...filters, categories })}
-      />
-      <View style={styles.row}>
-        <PrimaryButton
-          secondary
-          label="Фильтры"
-          expanded={filtersOpen}
-          onPress={() => {
-            setDraft(
-              Object.fromEntries(
-                numericFilters.flatMap(({ key }) =>
-                  filters[key] === undefined
-                    ? []
-                    : [[key, String(filters[key])]],
-                ),
-              ),
-            );
-            setFiltersOpen(!filtersOpen);
-          }}
+    <ScreenStack detail={renderDetail()}>
+      <FoodForm
+        readOnly
+        title={choose ? 'Выбрать рецепт' : 'Рецепты'}
+        onBack={onClose}
+        error={
+          error ||
+          (page.kind === 'detail' ? 'Рецепт больше недоступен.' : undefined)
+        }
+      >
+        {!!notice && (
+          <AppText accessibilityLiveRegion="polite">{notice}</AppText>
+        )}
+        <SearchField
+          name="recipe-query"
+          label="Поиск рецептов"
+          value={query}
+          onChange={setSearch}
+          onSubmit={() => remember(query)}
         />
-        <PrimaryButton
-          secondary
-          label="Сортировка"
-          expanded={sortOpen}
-          onPress={() => setSortOpen(!sortOpen)}
-        />
-        <PrimaryButton
-          secondary
-          label="Создать рецепт"
-          icon="Plus"
-          disabled={disabled}
-          onPress={() => setPage({ kind: 'create' })}
-        />
-      </View>
-      {sortOpen && (
-        <ChoiceGroup
-          label="Сортировка рецептов"
-          value={section === 'recent' ? 'recent' : sort}
-          options={[
-            ...sortOptions,
-            { value: 'recent', label: 'Недавно использованные' },
-          ]}
-          onChange={(value) => {
-            if (value === 'recent') setSection('recent');
-            else {
-              if (section === 'recent') setSection('all');
-              setSort(value);
-            }
-            setPageIndex(0);
-            setSortOpen(false);
-          }}
-        />
-      )}
-      {filtersOpen && (
-        <FilterPanel
-          filters={filters}
-          cuisines={builtinRecipeCuisines}
-          draft={draft}
-          onDraft={setDraft}
-          onChange={setFilterValues}
-          onPick={(target) => setPage({ kind: 'pick', target })}
-          onApply={() => {
-            const values = Object.fromEntries(
-              numericFilters.map(({ key }) => [
-                key,
-                draft[key]?.trim() ? parseDecimal(draft[key]) : undefined,
-              ]),
-            );
-            setFilterValues({ ...filters, ...values });
-            setFiltersOpen(false);
-          }}
-        />
-      )}
-      <FilterTags
-        filters={filters}
-        products={products}
-        onChange={(value) => {
-          setFilterValues(value);
-          setDraft(
-            Object.fromEntries(
-              numericFilters.flatMap(({ key }) =>
-                value[key] === undefined ? [] : [[key, String(value[key])]],
-              ),
-            ),
-          );
-        }}
-      />
-      {(active || section !== 'all' || pantry !== null) && (
-        <PrimaryButton
-          secondary
-          label="Сбросить фильтры"
-          onPress={() => {
-            setFilterValues({});
-            setDraft({});
-            setSection('all');
-            setPantry(null);
-            setSort('relevance');
-            setIgnoreBasics(true);
-          }}
-        />
-      )}
-      <PrimaryButton
-        secondary
-        label="Что приготовить из того, что есть"
-        expanded={pantry !== null}
-        onPress={() => {
-          setPantry(pantry === null ? [] : null);
-          setPageIndex(0);
-        }}
-      />
-      {pantry !== null && (
-        <Card>
-          <AppText tone="muted">
-            Совпадения по наличию продуктов. Количество продуктов не
-            проверяется.
-          </AppText>
+        {!query && (
           <View style={styles.row}>
+            {(state.recipeSearchHistory?.length
+              ? state.recipeSearchHistory
+              : quickQueries
+            ).map((term) => (
+              <ToggleChip
+                key={term}
+                label={term}
+                active={false}
+                onPress={() => {
+                  setSearch(term);
+                  remember(term);
+                }}
+              />
+            ))}
+            {!!state.recipeSearchHistory?.length && (
+              <ToggleChip
+                label="Очистить историю"
+                active={false}
+                onPress={() =>
+                  void change((current) => ({
+                    ...current,
+                    recipeSearchHistory: [],
+                  }))
+                }
+              />
+            )}
+          </View>
+        )}
+        <View style={styles.row}>
+          {sections.map(({ value, label }) => (
             <ToggleChip
-              label="Не учитывать воду, соль и чёрный перец"
-              active={ignoreBasics}
+              key={value}
+              label={label}
+              active={section === value}
               onPress={() => {
-                setIgnoreBasics(!ignoreBasics);
+                setSection(value);
                 setPageIndex(0);
               }}
             />
-            {pantry.map((id) => (
-              <ToggleChip
-                key={id}
-                active
-                label={
-                  (products.find((product) => product.id === id)?.name ?? id) +
-                  ' ×'
-                }
-                onPress={() => setIngredient('pantry', id)}
-              />
-            ))}
-          </View>
-          <PrimaryButton
-            secondary
-            label="Выбрать продукты дома"
-            onPress={() => setPage({ kind: 'pick', target: 'pantry' })}
-          />
-        </Card>
-      )}
-      {section === 'all' && !query && pantry === null && (
-        <View style={styles.section}>
-          <AppText variant="section" accessibilityRole="header">
-            Подборки
-          </AppText>
-          <View style={styles.row}>
-            {recommendations
-              .filter(
-                (value, index) =>
-                  index >= 2 ||
-                  (index === 0
-                    ? (remaining?.calories ?? 0) > 0
-                    : (remaining?.protein ?? 0) > 0 &&
-                      (remaining?.calories ?? 0) > 0),
-              )
-              .map((value) => (
-                <ToggleChip
-                  key={value}
-                  label={value}
-                  active={filters.recommendation === value}
-                  onPress={() =>
-                    setFilterValues({
-                      ...filters,
-                      recommendation:
-                        filters.recommendation === value ? undefined : value,
-                    })
-                  }
-                />
-              ))}
-          </View>
+          ))}
         </View>
-      )}
-      {session?.loading ? (
-        <ActivityIndicator accessibilityLabel="Загрузка рецептов" />
-      ) : (
-        <AppText
-          variant="caption"
-          tone="muted"
-          accessibilityLiveRegion="polite"
-        >
-          Найдено рецептов: {visible.length}
-        </AppText>
-      )}
-      {!visible.length && !session?.loading && (
-        <AppText tone="muted" accessibilityLiveRegion="polite">
-          {query
-            ? 'Рецепты по этому запросу не найдены.'
-            : section === 'own' && !active
-              ? 'Рецептов пока нет'
-              : section === 'favorite' && !active
-                ? 'Избранных рецептов пока нет.'
-                : 'Рецепты не найдены. Измените или сбросьте фильтры.'}
-        </AppText>
-      )}
-      {visible.length > pageSize && (
+        <CategoryStrip
+          categories={filters.categories ?? []}
+          onChange={(categories) => setFilterValues({ ...filters, categories })}
+        />
         <View style={styles.row}>
           <PrimaryButton
             secondary
-            label="Предыдущая страница"
-            disabled={resultPage === 0}
-            onPress={() => setPageIndex(resultPage - 1)}
+            label="Фильтры"
+            expanded={filtersOpen}
+            onPress={() => {
+              setDraft(
+                Object.fromEntries(
+                  numericFilters.flatMap(({ key }) =>
+                    filters[key] === undefined
+                      ? []
+                      : [[key, String(filters[key])]],
+                  ),
+                ),
+              );
+              setFiltersOpen(!filtersOpen);
+            }}
           />
           <PrimaryButton
             secondary
-            label="Следующая страница"
-            disabled={start + pageSize >= visible.length}
-            onPress={() => setPageIndex(resultPage + 1)}
+            label="Сортировка"
+            expanded={sortOpen}
+            onPress={() => setSortOpen(!sortOpen)}
+          />
+          <PrimaryButton
+            secondary
+            label="Создать рецепт"
+            icon="Plus"
+            disabled={disabled}
+            onPress={() => setPage({ kind: 'create' })}
           />
         </View>
-      )}
-      <View style={styles.grid}>
-        {visible
-          .slice(start, start + pageSize)
-          .map(({ recipe, nutrition, time, favorite, match }, index) => {
-            const title = match ? pantryTitle(match.missing) : undefined;
-            const previous = index
-              ? visible[start + index - 1]?.match
-              : undefined;
-            const groupStarts =
-              title && (!previous || title !== pantryTitle(previous.missing));
-            return (
-              <RecipeGridItem
-                key={recipe.id}
-                group={groupStarts ? title : undefined}
-                columns={width >= 540 ? 2 : 1}
-              >
-                <Card style={styles.card}>
-                  <RecipeArtwork category={recipe.category} />
-                  <View style={styles.heading}>
-                    <View style={styles.title}>
-                      <AppText variant="action">{recipe.name}</AppText>
-                      <AppText variant="caption" tone="muted">
-                        {recipe.category}
-                        {time !== undefined ? ' · ' + time + ' мин' : ''}
-                      </AppText>
-                    </View>
-                    <IconButton
-                      icon={favorite ? 'Check' : 'Heart'}
-                      compact
-                      label={
-                        (favorite
-                          ? 'Убрать из избранного: '
-                          : 'В избранное: ') + recipe.name
-                      }
-                      disabled={disabled}
-                      onPress={() => {
-                        const original = resolveRecipe(recipe.id);
-                        if (original)
-                          void change((current) =>
-                            setRecipeFavorite(current, original, !favorite),
-                          );
-                      }}
-                    />
-                  </View>
-                  <NutritionValues
-                    caption="На одну порцию"
-                    values={nutrition}
+        {sortOpen && (
+          <ChoiceGroup
+            label="Сортировка рецептов"
+            value={section === 'recent' ? 'recent' : sort}
+            options={[
+              ...sortOptions,
+              { value: 'recent', label: 'Недавно использованные' },
+            ]}
+            onChange={(value) => {
+              if (value === 'recent') setSection('recent');
+              else {
+                if (section === 'recent') setSection('all');
+                setSort(value);
+              }
+              setPageIndex(0);
+              setSortOpen(false);
+            }}
+          />
+        )}
+        {filtersOpen && (
+          <FilterPanel
+            filters={filters}
+            cuisines={builtinRecipeCuisines}
+            draft={draft}
+            onDraft={setDraft}
+            onChange={setFilterValues}
+            onPick={(target) => setPage({ kind: 'pick', target })}
+            onApply={() => {
+              const values = Object.fromEntries(
+                numericFilters.map(({ key }) => [
+                  key,
+                  draft[key]?.trim() ? parseDecimal(draft[key]) : undefined,
+                ]),
+              );
+              setFilterValues({ ...filters, ...values });
+              setFiltersOpen(false);
+            }}
+          />
+        )}
+        <FilterTags
+          filters={filters}
+          products={products}
+          onChange={(value) => {
+            setFilterValues(value);
+            setDraft(
+              Object.fromEntries(
+                numericFilters.flatMap(({ key }) =>
+                  value[key] === undefined ? [] : [[key, String(value[key])]],
+                ),
+              ),
+            );
+          }}
+        />
+        {(active || section !== 'all' || pantry !== null) && (
+          <PrimaryButton
+            secondary
+            label="Сбросить фильтры"
+            onPress={() => {
+              setFilterValues({});
+              setDraft({});
+              setSection('all');
+              setPantry(null);
+              setSort('relevance');
+              setIgnoreBasics(true);
+            }}
+          />
+        )}
+        <PrimaryButton
+          secondary
+          label="Что приготовить из того, что есть"
+          expanded={pantry !== null}
+          onPress={() => {
+            setPantry(pantry === null ? [] : null);
+            setPageIndex(0);
+          }}
+        />
+        {pantry !== null && (
+          <Card>
+            <AppText tone="muted">
+              Совпадения по наличию продуктов. Количество продуктов не
+              проверяется.
+            </AppText>
+            <View style={styles.row}>
+              <ToggleChip
+                label="Не учитывать воду, соль и чёрный перец"
+                active={ignoreBasics}
+                onPress={() => {
+                  setIgnoreBasics(!ignoreBasics);
+                  setPageIndex(0);
+                }}
+              />
+              {pantry.map((id) => (
+                <ToggleChip
+                  key={id}
+                  active
+                  label={
+                    (products.find((product) => product.id === id)?.name ??
+                      id) + ' ×'
+                  }
+                  onPress={() => setIngredient('pantry', id)}
+                />
+              ))}
+            </View>
+            <PrimaryButton
+              secondary
+              label="Выбрать продукты дома"
+              onPress={() => setPage({ kind: 'pick', target: 'pantry' })}
+            />
+          </Card>
+        )}
+        {section === 'all' && !query && pantry === null && (
+          <View style={styles.section}>
+            <AppText variant="section" accessibilityRole="header">
+              Подборки
+            </AppText>
+            <View style={styles.row}>
+              {recommendations
+                .filter(
+                  (value, index) =>
+                    index >= 2 ||
+                    (index === 0
+                      ? (remaining?.calories ?? 0) > 0
+                      : (remaining?.protein ?? 0) > 0 &&
+                        (remaining?.calories ?? 0) > 0),
+                )
+                .map((value) => (
+                  <ToggleChip
+                    key={value}
+                    label={value}
+                    active={filters.recommendation === value}
+                    onPress={() =>
+                      setFilterValues({
+                        ...filters,
+                        recommendation:
+                          filters.recommendation === value ? undefined : value,
+                      })
+                    }
                   />
-                  {match && (
-                    <AppText variant="caption" tone="muted">
-                      Есть {match.matched} из {match.total} · {match.percent}%
-                    </AppText>
-                  )}
-                  <View style={styles.heading}>
-                    <View style={styles.title}>
-                      <PrimaryButton
-                        secondary
-                        label={'Открыть: ' + recipe.name}
+                ))}
+            </View>
+          </View>
+        )}
+        {session?.loading ? (
+          <ActivityIndicator accessibilityLabel="Загрузка рецептов" />
+        ) : (
+          <AppText
+            variant="caption"
+            tone="muted"
+            accessibilityLiveRegion="polite"
+          >
+            Найдено рецептов: {visible.length}
+          </AppText>
+        )}
+        {!visible.length && !session?.loading && (
+          <AppText tone="muted" accessibilityLiveRegion="polite">
+            {query
+              ? 'Рецепты по этому запросу не найдены.'
+              : section === 'own' && !active
+                ? 'Рецептов пока нет'
+                : section === 'favorite' && !active
+                  ? 'Избранных рецептов пока нет.'
+                  : 'Рецепты не найдены. Измените или сбросьте фильтры.'}
+          </AppText>
+        )}
+        {visible.length > pageSize && (
+          <View style={styles.row}>
+            <PrimaryButton
+              secondary
+              label="Предыдущая страница"
+              disabled={resultPage === 0}
+              onPress={() => setPageIndex(resultPage - 1)}
+            />
+            <PrimaryButton
+              secondary
+              label="Следующая страница"
+              disabled={start + pageSize >= visible.length}
+              onPress={() => setPageIndex(resultPage + 1)}
+            />
+          </View>
+        )}
+        <View style={styles.grid}>
+          {visible
+            .slice(start, start + pageSize)
+            .map(({ recipe, nutrition, time, favorite, match }, index) => {
+              const title = match ? pantryTitle(match.missing) : undefined;
+              const previous = index
+                ? visible[start + index - 1]?.match
+                : undefined;
+              const groupStarts =
+                title && (!previous || title !== pantryTitle(previous.missing));
+              return (
+                <RecipeGridItem
+                  key={recipe.id}
+                  group={groupStarts ? title : undefined}
+                  columns={width >= 540 ? 2 : 1}
+                >
+                  <Card style={styles.card}>
+                    <RecipeArtwork category={recipe.category} />
+                    <View style={styles.heading}>
+                      <View style={styles.title}>
+                        <AppText variant="action">{recipe.name}</AppText>
+                        <AppText variant="caption" tone="muted">
+                          {recipe.category}
+                          {time !== undefined ? ' · ' + time + ' мин' : ''}
+                        </AppText>
+                      </View>
+                      <IconButton
+                        icon={favorite ? 'Check' : 'Heart'}
+                        compact
+                        label={
+                          (favorite
+                            ? 'Убрать из избранного: '
+                            : 'В избранное: ') + recipe.name
+                        }
+                        disabled={disabled}
                         onPress={() => {
-                          open(recipe);
-                          remember(query);
+                          const original = resolveRecipe(recipe.id);
+                          if (original)
+                            void change((current) =>
+                              setRecipeFavorite(current, original, !favorite),
+                            );
                         }}
                       />
                     </View>
-                    <IconButton
-                      icon="Plus"
-                      label={'Добавить в дневник: ' + recipe.name}
-                      disabled={disabled}
-                      onPress={() => {
-                        const original = resolveRecipe(recipe.id);
-                        if (original) setPage({ kind: 'log', original });
-                      }}
+                    <NutritionValues
+                      caption="На одну порцию"
+                      values={nutrition}
                     />
-                  </View>
-                </Card>
-              </RecipeGridItem>
-            );
-          })}
-      </View>
-    </FoodForm>
+                    {match && (
+                      <AppText variant="caption" tone="muted">
+                        Есть {match.matched} из {match.total} · {match.percent}%
+                      </AppText>
+                    )}
+                    <View style={styles.heading}>
+                      <View style={styles.title}>
+                        <PrimaryButton
+                          secondary
+                          label={'Открыть: ' + recipe.name}
+                          onPress={() => {
+                            open(recipe);
+                            remember(query);
+                          }}
+                        />
+                      </View>
+                      <IconButton
+                        icon="Plus"
+                        label={'Добавить в дневник: ' + recipe.name}
+                        disabled={disabled}
+                        onPress={() => {
+                          const original = resolveRecipe(recipe.id);
+                          if (original) setPage({ kind: 'log', original });
+                        }}
+                      />
+                    </View>
+                  </Card>
+                </RecipeGridItem>
+              );
+            })}
+        </View>
+      </FoodForm>
+    </ScreenStack>
   );
 }
 

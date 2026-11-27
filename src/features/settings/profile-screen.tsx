@@ -1,5 +1,6 @@
+import { Touchable } from '@/components/touchable';
 import { use, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
@@ -9,6 +10,7 @@ import { Dialog } from '@/components/dialog';
 import { AppHeader, SectionHeader } from '@/components/headers';
 import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { ScreenContainer } from '@/components/screen-container';
+import { ScreenStack } from '@/components/screen-stack';
 import { RadioGroup } from '@/components/radio-group';
 import { SettingsRow } from '@/components/settings-row';
 import { sectionTitles } from '@/constants/sections';
@@ -80,131 +82,138 @@ export function ProfileScreen() {
   const [nutritionUpdated, setNutritionUpdated] = useState(false);
   if (!appSettings) throw new Error('Не подключён AppSettingsProvider.');
 
-  if (calculator)
-    return (
-      <CalculatorScreen
-        onClose={(saved) => {
-          setCalculator(false);
-          setNutritionUpdated(saved);
-        }}
-      />
-    );
-
-  if (editing && session?.state.profile)
-    return (
-      <ProfileEditor
-        profile={session.state.profile}
-        section={editing}
-        onClose={(saved) => {
-          setEditing(undefined);
-          setUpdated(saved);
-        }}
-      />
-    );
-
-  return (
-    <ScreenContainer>
-      <AppHeader title={sectionTitles.profile} />
-      {updated && (
-        <AppText tone="accentText" accessibilityLiveRegion="polite">
-          Профиль обновлён.
-        </AppText>
-      )}
-      <ProfileSections
-        onEdit={(section) => {
-          setUpdated(false);
-          setEditing(section);
-        }}
-      />
-      {nutritionUpdated && (
-        <AppText tone="accentText" accessibilityLiveRegion="polite">
-          Цели питания сохранены.
-        </AppText>
-      )}
-      {session?.state.profile && (
-        <NutritionSummary
-          onOpen={() => {
-            setNutritionUpdated(false);
-            setCalculator(true);
+  function renderDetail() {
+    if (calculator)
+      return (
+        <CalculatorScreen
+          onClose={(saved) => {
+            setCalculator(false);
+            setNutritionUpdated(saved);
           }}
         />
-      )}
-      {appSettings.storageRecovery && (
-        <Card>
-          <SectionHeader title="Локальное хранилище" />
-          <AppText tone="muted" accessibilityRole="alert">
-            Хранилище недоступно. Сейчас используются настройки по умолчанию.
+      );
+
+    if (editing && session?.state.profile)
+      return (
+        <ProfileEditor
+          profile={session.state.profile}
+          section={editing}
+          onClose={(saved) => {
+            setEditing(undefined);
+            setUpdated(saved);
+          }}
+        />
+      );
+    return null;
+  }
+
+  return (
+    <ScreenStack detail={renderDetail()}>
+      <ScreenContainer>
+        <AppHeader title={sectionTitles.profile} />
+        {updated && (
+          <AppText tone="accentText" accessibilityLiveRegion="polite">
+            Профиль обновлён.
           </AppText>
-          {appSettings.storageRecovery.message && (
-            <AppText tone="error" accessibilityRole="alert">
-              {appSettings.storageRecovery.message}
-            </AppText>
-          )}
-          <PrimaryButton
-            label={
-              appSettings.storageRecovery.pending
-                ? 'Проверяем хранилище…'
-                : 'Проверить хранилище'
-            }
-            onPress={appSettings.storageRecovery.retry}
-            disabled={appSettings.storageRecovery.pending}
-            secondary
+        )}
+        <ProfileSections
+          onEdit={(section) => {
+            setUpdated(false);
+            setEditing(section);
+          }}
+        />
+        {nutritionUpdated && (
+          <AppText tone="accentText" accessibilityLiveRegion="polite">
+            Цели питания сохранены.
+          </AppText>
+        )}
+        {session?.state.profile && (
+          <NutritionSummary
+            onOpen={() => {
+              setNutritionUpdated(false);
+              setCalculator(true);
+            }}
           />
-        </Card>
-      )}
-      {sections
-        .filter(
-          ({ title }) => !session?.state.profile || title !== 'Профиль и цели',
-        )
-        .map(({ title, rows }) => (
-          <View key={title} style={styles.group}>
-            <SectionHeader title={title} />
-            <Card style={styles.settings}>
-              {rows.map(({ label, icon }, index) => (
-                <SettingsRow
-                  key={label}
-                  label={label}
-                  icon={icon}
-                  divider={index > 0}
-                  value={
-                    label === appearance
-                      ? themeModeLabels[appSettings.settings.themeMode]
-                      : undefined
-                  }
-                  onPress={() =>
-                    label === appearance
-                      ? setShowTheme(true)
-                      : showComingSoon(label)
-                  }
-                />
-              ))}
-            </Card>
-          </View>
-        ))}
-      <InstallAppSection />
-      <AppVersionSection />
-      <AppDiagnosticsSection />
-      {showTheme && (
+        )}
+        {appSettings.storageRecovery && (
+          <Card>
+            <SectionHeader title="Локальное хранилище" />
+            <AppText tone="muted" accessibilityRole="alert">
+              Хранилище недоступно. Сейчас используются настройки по умолчанию.
+            </AppText>
+            {appSettings.storageRecovery.message && (
+              <AppText tone="error" accessibilityRole="alert">
+                {appSettings.storageRecovery.message}
+              </AppText>
+            )}
+            <PrimaryButton
+              label={
+                appSettings.storageRecovery.pending
+                  ? 'Проверяем хранилище…'
+                  : 'Проверить хранилище'
+              }
+              onPress={appSettings.storageRecovery.retry}
+              disabled={appSettings.storageRecovery.pending}
+              secondary
+            />
+          </Card>
+        )}
+        {sections
+          .filter(
+            ({ title }) =>
+              !session?.state.profile || title !== 'Профиль и цели',
+          )
+          .map(({ title, rows }) => (
+            <View key={title} style={styles.group}>
+              <SectionHeader title={title} />
+              <Card style={styles.settings}>
+                {rows.map(({ label, icon }, index) => (
+                  <SettingsRow
+                    key={label}
+                    label={label}
+                    icon={icon}
+                    divider={index > 0}
+                    value={
+                      label === appearance
+                        ? themeModeLabels[appSettings.settings.themeMode]
+                        : undefined
+                    }
+                    onPress={() =>
+                      label === appearance
+                        ? setShowTheme(true)
+                        : showComingSoon(label)
+                    }
+                  />
+                ))}
+              </Card>
+            </View>
+          ))}
+        <InstallAppSection />
+        <AppVersionSection />
+        <AppDiagnosticsSection />
         <ThemeDialog
+          open={showTheme}
           mode={appSettings.settings.themeMode}
           onChange={appSettings.setThemeMode}
           onDismiss={() => setShowTheme(false)}
         />
-      )}
-    </ScreenContainer>
+      </ScreenContainer>
+    </ScreenStack>
   );
 }
 
 function ThemeDialog({
+  open,
   mode,
   onChange,
   onDismiss,
 }: {
+  open: boolean;
   mode: ThemeMode;
   onChange: (mode: ThemeMode) => Promise<void>;
   onDismiss: () => void;
 }) {
-  useUpdateBlocker();
+  useUpdateBlocker(open);
   const { colors } = useAppTheme();
   const saving = useRef(false);
   const [pending, setPending] = useState(false);
@@ -238,6 +247,8 @@ function ThemeDialog({
 
   return (
     <Dialog
+      open={open}
+      dismissible={!pending}
       title={appearance}
       onDismiss={() => {
         if (!saving.current) onDismiss();
@@ -247,7 +258,7 @@ function ThemeDialog({
         {themeOptions.map((option) => {
           const selected = mode === option;
           return (
-            <Pressable
+            <Touchable
               key={option}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected, disabled: pending }}
@@ -274,7 +285,7 @@ function ThemeDialog({
                 {themeModeLabels[option]}
               </AppText>
               {selected && <AppIcon name="Check" />}
-            </Pressable>
+            </Touchable>
           );
         })}
       </RadioGroup>

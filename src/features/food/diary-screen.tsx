@@ -7,6 +7,7 @@ import { CalendarPicker } from '@/components/calendar-picker';
 import { DateSelector } from '@/components/date-selector';
 import { AppHeader, SectionHeader } from '@/components/headers';
 import { ScreenContainer } from '@/components/screen-container';
+import { ScreenStack } from '@/components/screen-stack';
 import { useSelectedDate } from '@/features/calendar/selected-date';
 import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
@@ -45,144 +46,152 @@ export function DiaryScreen() {
     setFlow(null);
     setRecipes(false);
   }
-  if (calculator)
-    return (
-      <CalculatorScreen
-        onClose={(saved) => {
-          setCalculator(false);
-          setUpdated(saved);
-        }}
-      />
-    );
-  if (flow)
-    return (
-      <FoodFlow
-        date={date}
-        {...flow}
-        onClose={() => setFlow(null)}
-        onLogged={onLogged}
-      />
-    );
-  if (recipes)
-    return (
-      <RecipeFlow
-        date={date}
-        onClose={() => setRecipes(false)}
-        onLogged={onLogged}
-      />
-    );
+  function renderDetail() {
+    if (calculator)
+      return (
+        <CalculatorScreen
+          onClose={(saved) => {
+            setCalculator(false);
+            setUpdated(saved);
+          }}
+        />
+      );
+    if (flow)
+      return (
+        <FoodFlow
+          date={date}
+          {...flow}
+          onClose={() => setFlow(null)}
+          onLogged={onLogged}
+        />
+      );
+    if (recipes)
+      return (
+        <RecipeFlow
+          date={date}
+          onClose={() => setRecipes(false)}
+          onLogged={onLogged}
+        />
+      );
+    return null;
+  }
   return (
-    <ScreenContainer>
-      <AppHeader
-        title="Питание"
-        action={
-          <View style={styles.row}>
-            <IconButton
-              icon="Search"
-              label="Поиск продуктов"
-              disabled={disabled}
-              onPress={() => setFlow({})}
-            />
-            <IconButton
-              icon="Barcode"
-              label="Сканировать штрихкод"
-              disabled={disabled}
-              onPress={() => setFlow({ scan: true })}
-            />
-          </View>
-        }
-      />
-      <DateSelector
-        daily
-        date={selectedDate}
-        today={today}
-        onChange={selectDate}
-      />
-      {!sameDay(selectedDate, today) && (
+    <ScreenStack detail={renderDetail()}>
+      <ScreenContainer>
+        <AppHeader
+          title="Питание"
+          action={
+            <View style={styles.row}>
+              <IconButton
+                icon="Search"
+                label="Поиск продуктов"
+                disabled={disabled}
+                onPress={() => setFlow({})}
+              />
+              <IconButton
+                icon="Barcode"
+                label="Сканировать штрихкод"
+                disabled={disabled}
+                onPress={() => setFlow({ scan: true })}
+              />
+            </View>
+          }
+        />
+        <DateSelector
+          daily
+          date={selectedDate}
+          today={today}
+          onChange={selectDate}
+        />
+        {!sameDay(selectedDate, today) && (
+          <PrimaryButton
+            secondary
+            label="Вернуться к сегодня"
+            onPress={() => selectDate(today)}
+          />
+        )}
+        <DiaryStatus />
+        {!!notice && (
+          <AppText accessibilityRole="status" accessibilityLiveRegion="polite">
+            {notice}
+          </AppText>
+        )}
+        {updated && (
+          <AppText tone="accentText" accessibilityLiveRegion="polite">
+            Цели питания сохранены.
+          </AppText>
+        )}
+        <NutritionSummary
+          onOpen={() => {
+            setUpdated(false);
+            setCalculator(true);
+          }}
+        />
         <PrimaryButton
           secondary
-          label="Вернуться к сегодня"
-          onPress={() => selectDate(today)}
+          icon="BookOpen"
+          label="Рецепты"
+          disabled={disabled}
+          onPress={() => setRecipes(true)}
         />
-      )}
-      <DiaryStatus />
-      {!!notice && <AppText accessibilityLiveRegion="polite">{notice}</AppText>}
-      {updated && (
-        <AppText tone="accentText" accessibilityLiveRegion="polite">
-          Цели питания сохранены.
-        </AppText>
-      )}
-      <NutritionSummary
-        onOpen={() => {
-          setUpdated(false);
-          setCalculator(true);
-        }}
-      />
-      <PrimaryButton
-        secondary
-        icon="BookOpen"
-        label="Рецепты"
-        disabled={disabled}
-        onPress={() => setRecipes(true)}
-      />
-      <SectionHeader title="Дневник питания" />
-      {Object.entries(meals).map(([key, title]) => {
-        const meal = key as MealType;
-        const entries =
-          session?.state.entries.filter(
-            (e) => e.date === date && e.meal === meal,
-          ) ?? [];
-        return (
-          <Card key={meal}>
-            <SectionHeader title={title} />
-            <NutritionValues values={sumEntries(entries, date)} />
-            {!entries.length && (
-              <AppText variant="caption" tone="muted">
-                Пока нет записей. Добавьте первый продукт.
-              </AppText>
-            )}
-            {entries.map((entry) => (
-              <View key={entry.id} style={styles.entry}>
-                <AppText variant="action">{entry.product.name}</AppText>
+        <SectionHeader title="Дневник питания" />
+        {Object.entries(meals).map(([key, title]) => {
+          const meal = key as MealType;
+          const entries =
+            session?.state.entries.filter(
+              (e) => e.date === date && e.meal === meal,
+            ) ?? [];
+          return (
+            <Card key={meal}>
+              <SectionHeader title={title} />
+              <NutritionValues animate values={sumEntries(entries, date)} />
+              {!entries.length && (
                 <AppText variant="caption" tone="muted">
-                  {entry.unit === 'serving' && entry.recipe
-                    ? `${formatFoodQuantity(entry.amount)} порц.`
-                    : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+                  Пока нет записей. Добавьте первый продукт.
                 </AppText>
-                <NutritionValues values={entryNutrition(entry)} />
-                <PrimaryButton
-                  secondary
-                  label={`Изменить запись: ${entry.product.name}`}
-                  onPress={() => setFlow({ entry })}
-                  disabled={disabled}
-                />
-              </View>
-            ))}
-            <PrimaryButton
-              secondary
-              icon="Plus"
-              label={`Добавить продукт, ${title.toLocaleLowerCase('ru')}`}
-              disabled={disabled}
-              onPress={() => setFlow({ meal })}
-            />
-            {!!entries.length && (
+              )}
+              {entries.map((entry) => (
+                <View key={entry.id} style={styles.entry}>
+                  <AppText variant="action">{entry.product.name}</AppText>
+                  <AppText variant="caption" tone="muted">
+                    {entry.unit === 'serving' && entry.recipe
+                      ? `${formatFoodQuantity(entry.amount)} порц.`
+                      : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+                  </AppText>
+                  <NutritionValues values={entryNutrition(entry)} />
+                  <PrimaryButton
+                    secondary
+                    label={`Изменить запись: ${entry.product.name}`}
+                    onPress={() => setFlow({ entry })}
+                    disabled={disabled}
+                  />
+                </View>
+              ))}
               <PrimaryButton
                 secondary
-                label={`Скопировать ${title.toLocaleLowerCase('ru')} на дату`}
+                icon="Plus"
+                label={`Добавить продукт, ${title.toLocaleLowerCase('ru')}`}
                 disabled={disabled}
-                onPress={() => setCopying(meal)}
+                onPress={() => setFlow({ meal })}
               />
-            )}
-          </Card>
-        );
-      })}
-      {copying && (
+              {!!entries.length && (
+                <PrimaryButton
+                  secondary
+                  label={`Скопировать ${title.toLocaleLowerCase('ru')} на дату`}
+                  disabled={disabled}
+                  onPress={() => setCopying(meal)}
+                />
+              )}
+            </Card>
+          );
+        })}
         <CalendarPicker
+          open={copying !== null}
           date={selectedDate}
           today={today}
           onDismiss={() => setCopying(null)}
           onChange={(to) => {
-            if (!session) return;
+            if (!session || !copying) return;
             const meal = copying;
             void session
               .change((s) => copyMeal(s, date, meal, dateKey(to)))
@@ -192,8 +201,8 @@ export function DiaryScreen() {
               );
           }}
         />
-      )}
-    </ScreenContainer>
+      </ScreenContainer>
+    </ScreenStack>
   );
 }
 const styles = StyleSheet.create({

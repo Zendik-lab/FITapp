@@ -3,12 +3,15 @@ import { useEffect } from 'react';
 
 import { StatusScreen } from '@/components/status-screen';
 import { NavigationAppearance } from '@/theme/navigation-appearance';
+import { MotionProvider } from '@/theme/motion';
 
 export default function RootLayout() {
   return (
-    <NavigationAppearance>
-      <Slot />
-    </NavigationAppearance>
+    <MotionProvider>
+      <NavigationAppearance>
+        <Slot />
+      </NavigationAppearance>
+    </MotionProvider>
   );
 }
 

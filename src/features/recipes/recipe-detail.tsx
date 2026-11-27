@@ -286,30 +286,33 @@ export function RecipeDetail({
           onPress={() => setConfirm(true)}
         />
       )}
-      {confirm && (
-        <Dialog title="Удалить рецепт?" onDismiss={() => setConfirm(false)}>
-          <AppText>
-            «{recipe.name}» исчезнет из списка рецептов. История питания
-            сохранится.
-          </AppText>
-          <PrimaryButton
-            secondary
-            label="Отмена"
-            disabled={session?.pending}
-            onPress={() => setConfirm(false)}
-          />
-          <PrimaryButton
-            label="Подтвердить удаление рецепта"
-            disabled={disabled}
-            onPress={() =>
-              void commit(
-                (state) => deleteRecipe(state, recipe.id, recipe),
-                'Рецепт удалён.',
-              )
-            }
-          />
-        </Dialog>
-      )}
+      <Dialog
+        open={confirm}
+        dismissible={!session?.pending}
+        title="Удалить рецепт?"
+        onDismiss={() => setConfirm(false)}
+      >
+        <AppText>
+          «{recipe.name}» исчезнет из списка рецептов. История питания
+          сохранится.
+        </AppText>
+        <PrimaryButton
+          secondary
+          label="Отмена"
+          disabled={session?.pending}
+          onPress={() => setConfirm(false)}
+        />
+        <PrimaryButton
+          label="Подтвердить удаление рецепта"
+          disabled={disabled}
+          onPress={() =>
+            void commit(
+              (state) => deleteRecipe(state, recipe.id, recipe),
+              'Рецепт удалён.',
+            )
+          }
+        />
+      </Dialog>
     </FoodForm>
   );
 }

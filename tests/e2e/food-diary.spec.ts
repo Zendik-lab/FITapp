@@ -83,6 +83,43 @@ async function typeStable(page: Page, label: string, value: string) {
   }
   await expect(field).toHaveValue(value);
 }
+
+test('возврат из порции сохраняет поиск и позицию списка', async ({ page }) => {
+  await seed(page);
+  await button(page, 'Поиск продуктов').click();
+  await typeStable(page, 'Название или штрихкод', 'овся');
+  const result = visible(
+    page,
+    page.getByRole('button', { name: /^Выбрать: / }),
+  ).first();
+  await result.scrollIntoViewIfNeeded();
+  const scrollPosition = () =>
+    result.evaluate((element) => {
+      let parent = element.parentElement;
+      while (
+        parent &&
+        !/auto|scroll/.test(getComputedStyle(parent).overflowY)
+      ) {
+        parent = parent.parentElement;
+      }
+      return parent?.scrollTop ?? 0;
+    });
+  const offset = await scrollPosition();
+  expect(offset).toBeGreaterThan(0);
+  await result.click();
+  await expect(
+    page.getByRole('heading', { name: 'Порция продукта' }),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Сегодня', exact: true }).click();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Назад').click();
+  const search = visible(
+    page,
+    page.getByLabel('Название или штрихкод', { exact: true }),
+  );
+  await expect(search).toHaveValue('овся');
+  await expect.poll(scrollPosition).toBeCloseTo(offset, 0);
+});
 async function create(page: Page, barcode?: string) {
   await button(page, 'Поиск продуктов').click();
   await button(page, 'Создать продукт').click();
@@ -238,6 +275,15 @@ test('офлайн CRUD, сохранение после двух перезап
   ).toBeVisible();
   await page.getByRole('tab', { name: 'Питание', exact: true }).click();
   await context.setOffline(true);
+  await button(page, 'Поиск продуктов').click();
+  await typeStable(page, 'Название или штрихкод', 'банан');
+  await expect(button(page, 'Найти в Open Food Facts')).toBeDisabled();
+  await button(page, 'Выбрать: Банан').click();
+  await button(page, 'Назад').click();
+  await expect(
+    visible(page, page.getByLabel('Название или штрихкод', { exact: true })),
+  ).toHaveValue('банан');
+  await button(page, 'Назад').click();
   await create(page, '036000291452');
   await typeStable(page, 'Количество, г', '150');
   await button(page, 'Добавить в дневник').click();

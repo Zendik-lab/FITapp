@@ -1,9 +1,10 @@
 import { useRef, useState, type ReactNode } from 'react';
-import type { ScrollViewInstance } from 'react-native';
+import { StyleSheet, View, type ScrollViewInstance } from 'react-native';
 import { AppText } from '@/components/app-text';
-import { PrimaryButton } from '@/components/buttons';
+import { IconButton, PrimaryButton } from '@/components/buttons';
 import { Dialog } from '@/components/dialog';
 import { FormScreen } from '@/components/form-screen';
+import { spacing } from '@/theme';
 import { DiaryStatus } from './diary-status';
 
 export function FoodForm({
@@ -34,15 +35,21 @@ export function FoodForm({
       readOnly={readOnly}
       blockUpdate={dirty || pending}
     >
-      <AppText variant="title" accessibilityRole="header">
-        {title}
-      </AppText>
-      <PrimaryButton
-        secondary
-        label="Назад"
-        disabled={pending}
-        onPress={() => (dirty ? setDiscard(true) : onBack())}
-      />
+      <View style={styles.header}>
+        <IconButton
+          icon="ChevronLeft"
+          label="Назад"
+          disabled={pending}
+          onPress={() => (dirty ? setDiscard(true) : onBack())}
+        />
+        <AppText
+          variant="title"
+          accessibilityRole="header"
+          style={styles.title}
+        >
+          {title}
+        </AppText>
+      </View>
       <DiaryStatus />
       {!!error && (
         <AppText tone="error" accessibilityRole="alert">
@@ -50,20 +57,24 @@ export function FoodForm({
         </AppText>
       )}
       {children}
-      {discard && (
-        <Dialog
-          title="Выйти без сохранения?"
-          onDismiss={() => setDiscard(false)}
-        >
-          <AppText>Изменения в этой форме не будут сохранены.</AppText>
-          <PrimaryButton
-            secondary
-            label="Продолжить редактирование"
-            onPress={() => setDiscard(false)}
-          />
-          <PrimaryButton label="Выйти без сохранения" onPress={onBack} />
-        </Dialog>
-      )}
+      <Dialog
+        open={discard}
+        title="Выйти без сохранения?"
+        onDismiss={() => setDiscard(false)}
+      >
+        <AppText>Изменения в этой форме не будут сохранены.</AppText>
+        <PrimaryButton
+          secondary
+          label="Продолжить редактирование"
+          onPress={() => setDiscard(false)}
+        />
+        <PrimaryButton label="Выйти без сохранения" onPress={onBack} />
+      </Dialog>
     </FormScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.compact },
+  title: { flex: 1, minWidth: 0 },
+});

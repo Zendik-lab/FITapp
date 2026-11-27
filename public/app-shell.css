@@ -74,6 +74,10 @@ body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+[data-keyboard-open] .app-tab-bar {
+  display: none;
+}
+
 input,
 textarea,
 select {
@@ -89,9 +93,31 @@ textarea {
   outline-offset: -2px;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  [data-motion-press],
+  :where(input, textarea) {
+    transition-property: background-color, border-color, opacity, transform;
+    transition-duration: var(--motion-press, 0ms);
+    transition-timing-function: var(--motion-easing, ease-out);
+  }
+}
+
+:where(input, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
 .app-dialog {
+  --dialog-gutter: max(
+    16px,
+    env(safe-area-inset-left, 0px),
+    env(safe-area-inset-right, 0px)
+  );
+  --dialog-shift: 8px;
   box-sizing: border-box;
-  width: min(400px, calc(100% - 32px));
+  max-width: none;
+  inset-block: env(safe-area-inset-top, 0px)
+    max(env(safe-area-inset-bottom, 0px), var(--visual-viewport-bottom, 0px));
   max-height: calc(100% - 32px);
   max-height: calc(
     var(--visual-viewport-height, 100dvh) - env(safe-area-inset-top, 0px) -
@@ -105,4 +131,84 @@ textarea {
 
 .app-dialog::backdrop {
   background: #0006;
+  overscroll-behavior: contain;
+}
+
+.app-dialog-content {
+  display: grid;
+}
+
+.app-sheet-handle {
+  display: none;
+}
+
+@media (max-width: 540px) and (orientation: portrait) {
+  .app-dialog[data-presentation='sheet'] {
+    --dialog-gutter: 6px;
+    --dialog-shift: 40px;
+    inset-block-start: auto;
+    margin-block-end: 8px;
+  }
+
+  .app-dialog[data-presentation='sheet'] .app-dialog-content {
+    gap: 10px !important;
+    padding-inline: 8px !important;
+    padding-top: 0 !important;
+    padding-bottom: 12px !important;
+  }
+
+  .app-sheet-handle {
+    display: grid;
+    place-items: center;
+    height: 26px;
+    touch-action: none;
+  }
+
+  .app-sheet-handle > span {
+    width: 32px;
+    height: 4px;
+    border-radius: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-dialog[open] {
+    animation-name: dialog-in;
+    animation-fill-mode: both;
+  }
+
+  .app-dialog[open][data-closing] {
+    animation-name: dialog-out;
+  }
+
+  .app-dialog[open]::backdrop {
+    animation: backdrop-fade var(--motion-dialog, 0ms) ease-out both;
+  }
+
+  .app-dialog[open][data-closing]::backdrop {
+    animation: backdrop-fade var(--motion-exit, 0ms) ease-out reverse both;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--dialog-shift));
+  }
+}
+
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(var(--dialog-shift));
+  }
+}
+
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

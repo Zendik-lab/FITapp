@@ -114,23 +114,22 @@ export function ProfileEditor({
           }
           secondary
         />
-        {discard && (
-          <Dialog
-            title="Отменить изменения?"
-            onDismiss={() => setDiscard(false)}
-          >
-            <AppText>Изменения этого раздела не будут сохранены.</AppText>
-            <PrimaryButton
-              label="Продолжить редактирование"
-              onPress={() => setDiscard(false)}
-            />
-            <PrimaryButton
-              label="Отменить изменения"
-              onPress={() => onClose(false)}
-              secondary
-            />
-          </Dialog>
-        )}
+        <Dialog
+          open={discard}
+          title="Отменить изменения?"
+          onDismiss={() => setDiscard(false)}
+        >
+          <AppText>Изменения этого раздела не будут сохранены.</AppText>
+          <PrimaryButton
+            label="Продолжить редактирование"
+            onPress={() => setDiscard(false)}
+          />
+          <PrimaryButton
+            label="Отменить изменения"
+            onPress={() => onClose(false)}
+            secondary
+          />
+        </Dialog>
       </FormScreen>
     </FieldFocusContext>
   );

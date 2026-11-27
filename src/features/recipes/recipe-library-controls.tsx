@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Touchable } from '@/components/touchable';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { AppText } from '@/components/app-text';
 import { PrimaryButton } from '@/components/buttons';
@@ -28,9 +29,10 @@ export function ToggleChip({
 }) {
   const { colors } = useAppTheme();
   return (
-    <Pressable
+    <Touchable
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
+      aria-pressed={active}
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
@@ -40,10 +42,14 @@ export function ToggleChip({
         },
       ]}
     >
-      <AppText variant="caption" tone={active ? 'accentText' : undefined}>
+      <AppText
+        variant="caption"
+        tone={active ? 'accentText' : undefined}
+        style={active && { textDecorationLine: 'underline' }}
+      >
         {label}
       </AppText>
-    </Pressable>
+    </Touchable>
   );
 }
 

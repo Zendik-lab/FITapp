@@ -139,7 +139,7 @@ function IngredientFields({
           )}
         </>
       )}
-      {values && <NutritionValues values={values} />}
+      {values && <NutritionValues animate values={values} />}
       <PrimaryButton
         secondary
         label={`Удалить ингредиент: ${snapshot.productName}`}

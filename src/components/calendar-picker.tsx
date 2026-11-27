@@ -1,5 +1,6 @@
+import { Touchable } from '@/components/touchable';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { AppText } from './app-text';
 import { IconButton, PrimaryButton } from './buttons';
 import { Dialog } from './dialog';
@@ -7,11 +8,13 @@ import { formatDate, sameDay } from '@/features/calendar/calendar';
 import { spacing, touchSize, radii, useAppTheme } from '@/theme';
 
 export function CalendarPicker({
+  open,
   date,
   today,
   onChange,
   onDismiss,
 }: {
+  open: boolean;
   date: Date;
   today: Date;
   onChange(date: Date): void;
@@ -20,6 +23,11 @@ export function CalendarPicker({
   const [month, setMonth] = useState(
     () => new Date(date.getFullYear(), date.getMonth(), 1),
   );
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+  }
   const { colors } = useAppTheme();
   const offset = (month.getDay() + 6) % 7;
   const count = new Date(
@@ -32,7 +40,12 @@ export function CalendarPicker({
     onDismiss();
   }
   return (
-    <Dialog title="Выберите дату" onDismiss={onDismiss}>
+    <Dialog
+      open={open}
+      presentation="sheet"
+      title="Выберите дату"
+      onDismiss={onDismiss}
+    >
       <View style={styles.row}>
         <IconButton
           compact
@@ -75,7 +88,7 @@ export function CalendarPicker({
           return i < offset ? (
             <View key={i} style={styles.cell} />
           ) : (
-            <Pressable
+            <Touchable
               key={i}
               accessibilityRole="button"
               accessibilityState={{ selected }}
@@ -99,7 +112,7 @@ export function CalendarPicker({
               <AppText tone={selected ? 'onAccent' : 'text'}>
                 {value.getDate()}
               </AppText>
-            </Pressable>
+            </Touchable>
           );
         })}
       </View>

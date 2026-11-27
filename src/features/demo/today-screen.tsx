@@ -1,5 +1,6 @@
+import { Touchable } from '@/components/touchable';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { IconButton } from '@/components/buttons';
@@ -11,6 +12,7 @@ import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { EmptyState, StatCard } from '@/components/info-cards';
 import { MacroProgressBar } from '@/components/progress-indicators';
 import { ScreenContainer } from '@/components/screen-container';
+import { ScreenStack } from '@/components/screen-stack';
 import { sectionTitles } from '@/constants/sections';
 import {
   formatDate,
@@ -54,181 +56,184 @@ export function TodayScreen() {
   const isToday = sameDay(today, selectedDate);
   const day = getDemoDay(isToday);
 
-  if (calculator)
-    return <CalculatorScreen onClose={() => setCalculator(false)} />;
-  if (food)
-    return (
-      <FoodFlow
-        date={dateKey(selectedDate)}
-        entry={food.entry}
-        onClose={() => setFood(null)}
-        onLogged={(message, date) => {
-          selectDate(parseDateKey(date));
-          setFoodNotice(message);
-          setFood(null);
-        }}
-      />
-    );
+  const detail = calculator ? (
+    <CalculatorScreen onClose={() => setCalculator(false)} />
+  ) : food ? (
+    <FoodFlow
+      date={dateKey(selectedDate)}
+      entry={food.entry}
+      onClose={() => setFood(null)}
+      onLogged={(message, date) => {
+        selectDate(parseDateKey(date));
+        setFoodNotice(message);
+        setFood(null);
+      }}
+    />
+  ) : null;
 
   return (
-    <ScreenContainer>
-      <View style={styles.header}>
-        <AppText tone="accentText" variant="caption">
-          {formatDate(today, {
-            day: 'numeric',
-            month: 'long',
-            weekday: 'long',
-          }).toLocaleUpperCase('ru')}
-        </AppText>
-        <AppHeader
-          title={sectionTitles.index}
-          subtitle={profile ? `Привет, ${profile.personal.name}!` : 'Привет!'}
-        />
-      </View>
-      <DateSelector date={selectedDate} today={today} onChange={selectDate} />
-      {diary && <DiaryStatus />}
-      {!!foodNotice && (
-        <AppText accessibilityLiveRegion="polite">{foodNotice}</AppText>
-      )}
-      <View style={styles.group}>
-        {profile ? (
-          <NutritionSummary dominant onOpen={() => setCalculator(true)} />
-        ) : (
-          <>
-            <AppText variant="caption" tone="muted">
-              {demoLabel}
-            </AppText>
-            <CalorieCard day={day} dominant />
-          </>
+    <ScreenStack detail={detail}>
+      <ScreenContainer>
+        <View style={styles.header}>
+          <AppText tone="accentText" variant="caption">
+            {formatDate(today, {
+              day: 'numeric',
+              month: 'long',
+              weekday: 'long',
+            }).toLocaleUpperCase('ru')}
+          </AppText>
+          <AppHeader
+            title={sectionTitles.index}
+            subtitle={profile ? `Привет, ${profile.personal.name}!` : 'Привет!'}
+          />
+        </View>
+        <DateSelector date={selectedDate} today={today} onChange={selectDate} />
+        {diary && <DiaryStatus />}
+        {!!foodNotice && (
+          <AppText accessibilityRole="status" accessibilityLiveRegion="polite">
+            {foodNotice}
+          </AppText>
         )}
-      </View>
-      {diary && (
         <View style={styles.group}>
-          <SectionHeader title="Последние продукты" />
-          {diary.state.entries
-            .filter((e) => e.date === dateKey(selectedDate))
-            .slice(-3)
-            .reverse()
-            .map((entry) => (
-              <Card key={entry.id}>
-                <AppText variant="action">
-                  {entry.product.name} ·{' '}
-                  {entry.recipe && entry.unit === 'serving'
-                    ? `${formatFoodQuantity(entry.amount)} порц.`
-                    : `${formatFoodQuantity(entry.grams ?? 0)} г`}
-                </AppText>
-                <NutritionValues values={entryNutrition(entry)} />
-                <IconButton
-                  icon="ChevronRight"
-                  label={`Открыть запись: ${entry.product.name}`}
-                  onPress={() => setFood({ entry })}
-                />
-              </Card>
-            ))}
-          {!diary.state.entries.some(
-            (e) => e.date === dateKey(selectedDate),
-          ) && (
-            <AppText tone="muted">
-              В выбранный день пока нет записей питания.
-            </AppText>
+          {profile ? (
+            <NutritionSummary dominant onOpen={() => setCalculator(true)} />
+          ) : (
+            <>
+              <AppText variant="caption" tone="muted">
+                {demoLabel}
+              </AppText>
+              <CalorieCard day={day} dominant />
+            </>
           )}
         </View>
-      )}
-      <View
-        style={[
-          styles.stats,
-          (width < 360 || fontScale > 1.5) && styles.statsStacked,
-        ]}
-      >
-        <StatCard
-          label="Текущий вес"
-          icon="Scale"
-          value={`${formatNumber(profile?.body.currentWeightKg ?? demoWeight.current)} кг`}
-          detail={`Цель ${formatNumber(profile?.goals.targetWeightKg ?? demoWeight.goal)} кг`}
-        />
-        <Card style={styles.water}>
-          <MacroProgressBar label="Вода" {...day.water} tone="water" />
-          <IconButton
-            label="Добавить воду"
-            icon="Plus"
-            onPress={() => showComingSoon('Добавить воду')}
-          />
-        </Card>
-      </View>
-      {profile && (
-        <Card>
-          <SectionHeader title={goalLabels[profile.goals.kind]} />
-          <AppText>
-            До целевого веса:{' '}
-            {formatNumber(
-              Math.abs(
-                profile.goals.targetWeightKg - profile.body.currentWeightKg,
-              ),
-            )}{' '}
-            кг
-          </AppText>
-          <AppText variant="caption" tone="muted">
-            Вес указан в профиле. Дневник веса появится позже.
-          </AppText>
-        </Card>
-      )}
-      {profile && (
-        <AppText variant="caption" tone="muted">
-          {demoLabel}: вода и тренировки
-        </AppText>
-      )}
-      <View style={styles.group}>
-        <SectionHeader title="Тренировка" />
-        <EmptyState
-          title={isToday ? demoTraining.next : 'Нет тренировки'}
-          description={
-            isToday
-              ? demoTraining.description
-              : 'На выбранную дату тренировок нет.'
-          }
-          icon="Dumbbell"
-          action={
-            isToday ? (
-              <IconButton
-                label="Начать тренировку"
-                icon="Play"
-                onPress={() => showComingSoon('Начать тренировку')}
-              />
-            ) : undefined
-          }
-        />
-      </View>
-      <View style={styles.group}>
-        <SectionHeader title="Быстрые действия" />
-        <View style={styles.actions}>
-          {quickActions.map(({ label, icon }) => (
-            <Pressable
-              key={label}
-              accessibilityRole="button"
-              onPress={() =>
-                label === 'Добавить еду' && diary
-                  ? setFood({})
-                  : showComingSoon(label)
-              }
-              style={({ pressed }) => [
-                styles.action,
-                {
-                  backgroundColor: pressed
-                    ? colors.accentSurface
-                    : colors.surface,
-                },
-                fontScale > 1.5 && styles.fullAction,
-              ]}
-            >
-              <AppIcon name={icon} size={19} />
-              <AppText variant="action" style={styles.actionLabel}>
-                {label}
+        {diary && (
+          <View style={styles.group}>
+            <SectionHeader title="Последние продукты" />
+            {diary.state.entries
+              .filter((e) => e.date === dateKey(selectedDate))
+              .slice(-3)
+              .reverse()
+              .map((entry) => (
+                <Card key={entry.id}>
+                  <AppText variant="action">
+                    {entry.product.name} ·{' '}
+                    {entry.recipe && entry.unit === 'serving'
+                      ? `${formatFoodQuantity(entry.amount)} порц.`
+                      : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+                  </AppText>
+                  <NutritionValues values={entryNutrition(entry)} />
+                  <IconButton
+                    icon="ChevronRight"
+                    label={`Открыть запись: ${entry.product.name}`}
+                    onPress={() => setFood({ entry })}
+                  />
+                </Card>
+              ))}
+            {!diary.state.entries.some(
+              (e) => e.date === dateKey(selectedDate),
+            ) && (
+              <AppText tone="muted">
+                В выбранный день пока нет записей питания.
               </AppText>
-            </Pressable>
-          ))}
+            )}
+          </View>
+        )}
+        <View
+          style={[
+            styles.stats,
+            (width < 360 || fontScale > 1.5) && styles.statsStacked,
+          ]}
+        >
+          <StatCard
+            label="Текущий вес"
+            icon="Scale"
+            value={`${formatNumber(profile?.body.currentWeightKg ?? demoWeight.current)} кг`}
+            detail={`Цель ${formatNumber(profile?.goals.targetWeightKg ?? demoWeight.goal)} кг`}
+          />
+          <Card style={styles.water}>
+            <MacroProgressBar label="Вода" {...day.water} tone="water" />
+            <IconButton
+              label="Добавить воду"
+              icon="Plus"
+              onPress={() => showComingSoon('Добавить воду')}
+            />
+          </Card>
         </View>
-      </View>
-    </ScreenContainer>
+        {profile && (
+          <Card>
+            <SectionHeader title={goalLabels[profile.goals.kind]} />
+            <AppText>
+              До целевого веса:{' '}
+              {formatNumber(
+                Math.abs(
+                  profile.goals.targetWeightKg - profile.body.currentWeightKg,
+                ),
+              )}{' '}
+              кг
+            </AppText>
+            <AppText variant="caption" tone="muted">
+              Вес указан в профиле. Дневник веса появится позже.
+            </AppText>
+          </Card>
+        )}
+        {profile && (
+          <AppText variant="caption" tone="muted">
+            {demoLabel}: вода и тренировки
+          </AppText>
+        )}
+        <View style={styles.group}>
+          <SectionHeader title="Тренировка" />
+          <EmptyState
+            title={isToday ? demoTraining.next : 'Нет тренировки'}
+            description={
+              isToday
+                ? demoTraining.description
+                : 'На выбранную дату тренировок нет.'
+            }
+            icon="Dumbbell"
+            action={
+              isToday ? (
+                <IconButton
+                  label="Начать тренировку"
+                  icon="Play"
+                  onPress={() => showComingSoon('Начать тренировку')}
+                />
+              ) : undefined
+            }
+          />
+        </View>
+        <View style={styles.group}>
+          <SectionHeader title="Быстрые действия" />
+          <View style={styles.actions}>
+            {quickActions.map(({ label, icon }) => (
+              <Touchable
+                key={label}
+                accessibilityRole="button"
+                onPress={() =>
+                  label === 'Добавить еду' && diary
+                    ? setFood({})
+                    : showComingSoon(label)
+                }
+                style={({ pressed }) => [
+                  styles.action,
+                  {
+                    backgroundColor: pressed
+                      ? colors.accentSurface
+                      : colors.surface,
+                  },
+                  fontScale > 1.5 && styles.fullAction,
+                ]}
+              >
+                <AppIcon name={icon} size={19} />
+                <AppText variant="action" style={styles.actionLabel}>
+                  {label}
+                </AppText>
+              </Touchable>
+            ))}
+          </View>
+        </View>
+      </ScreenContainer>
+    </ScreenStack>
   );
 }
 

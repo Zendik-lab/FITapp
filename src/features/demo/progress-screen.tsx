@@ -1,5 +1,6 @@
+import { Touchable } from '@/components/touchable';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
 import { IconButton, PrimaryButton } from '@/components/buttons';
@@ -72,7 +73,7 @@ export function ProgressScreen() {
             {periods.map((option) => {
               const selected = period.days === option.days;
               return (
-                <Pressable
+                <Touchable
                   key={option.days}
                   accessibilityRole="tab"
                   accessibilityState={{ selected }}
@@ -95,7 +96,7 @@ export function ProgressScreen() {
                   >
                     {option.label}
                   </AppText>
-                </Pressable>
+                </Touchable>
               );
             })}
           </View>
