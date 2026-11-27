@@ -1,4 +1,5 @@
 import { Touchable } from '@/components/touchable';
+import { PersonalizationScreen } from './personalization-screen';
 import { use, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -72,6 +73,7 @@ const sections: readonly {
 ];
 
 export function ProfileScreen() {
+  const [customizing, setCustomizing] = useState(false);
   const appSettings = use(AppSettingsContext);
   const showComingSoon = useComingSoon();
   const [showTheme, setShowTheme] = useState(false);
@@ -83,6 +85,8 @@ export function ProfileScreen() {
   if (!appSettings) throw new Error('Не подключён AppSettingsProvider.');
 
   function renderDetail() {
+    if (customizing)
+      return <PersonalizationScreen onBack={() => setCustomizing(false)} />;
     if (calculator)
       return (
         <CalculatorScreen
@@ -111,6 +115,14 @@ export function ProfileScreen() {
     <ScreenStack detail={renderDetail()}>
       <ScreenContainer>
         <AppHeader title={sectionTitles.profile} />
+        {appSettings.setPersonalization && !appSettings.storageRecovery && (
+          <PrimaryButton
+            secondary
+            icon="Contrast"
+            label="Персонализация"
+            onPress={() => setCustomizing(true)}
+          />
+        )}
         {updated && (
           <AppText tone="accentText" accessibilityLiveRegion="polite">
             Профиль обновлён.

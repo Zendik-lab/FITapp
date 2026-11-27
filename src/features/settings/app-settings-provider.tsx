@@ -6,6 +6,12 @@ import {
   type StorageRecovery,
 } from './app-settings-context';
 import { saveThemeMode } from './save-theme-mode';
+import { getSettingsStorage } from '@/database/settings-storage';
+import {
+  decodePersonalization,
+  personalizationKey,
+  type Personalization,
+} from './personalization';
 
 export function AppSettingsProvider({
   initialSettings,
@@ -17,9 +23,11 @@ export function AppSettingsProvider({
   children: ReactNode;
 }) {
   const [savedTheme, setSavedTheme] = useState<ThemeMode>();
+  const [presentation, setPresentation] = useState<Personalization>();
   const settings = {
     ...initialSettings,
     themeMode: savedTheme ?? initialSettings.themeMode,
+    personalization: presentation ?? initialSettings.personalization,
   };
 
   async function setThemeMode(themeMode: ThemeMode) {
@@ -28,8 +36,18 @@ export function AppSettingsProvider({
     setSavedTheme(themeMode);
   }
 
+  async function setPersonalization(preferences: Personalization) {
+    const value = JSON.stringify(preferences);
+    const decoded = decodePersonalization(value);
+    const storage = await getSettingsStorage();
+    await storage.apply([{ key: personalizationKey, value }]);
+    setPresentation(decoded);
+  }
+
   return (
-    <AppSettingsContext value={{ settings, setThemeMode, storageRecovery }}>
+    <AppSettingsContext
+      value={{ settings, setThemeMode, setPersonalization, storageRecovery }}
+    >
       {children}
     </AppSettingsContext>
   );

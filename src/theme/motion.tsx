@@ -1,5 +1,6 @@
 import { createContext, use, useEffect, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Easing, Platform } from 'react-native';
+import { AppSettingsContext } from '@/features/settings/app-settings-context';
 
 export const motion = {
   press: 130,
@@ -8,6 +9,7 @@ export const motion = {
   data: 240,
   dialog: 280,
   exit: 180,
+  launch: 1350,
   easing: Easing.bezier(0.22, 1, 0.36, 1),
   cssEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
   spring: { stiffness: 460, damping: 34, mass: 0.7, overshootClamping: true },
@@ -66,5 +68,15 @@ export function MotionProvider({ children }: { children: ReactNode }) {
 }
 
 export function useReducedMotion() {
-  return use(ReducedMotion);
+  const reduced = use(ReducedMotion);
+  return (
+    use(AppSettingsContext)?.settings.personalization?.motion === 'off' ||
+    reduced
+  );
+}
+
+export function useMotionDistance() {
+  return use(AppSettingsContext)?.settings.personalization?.motion === 'subtle'
+    ? 0
+    : 5;
 }

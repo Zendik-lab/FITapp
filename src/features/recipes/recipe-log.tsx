@@ -51,7 +51,7 @@ export function RecipeLog({
   date: string;
   meal: MealType;
   onBack(): void;
-  onSaved(message: string, date: string): void;
+  onSaved(message: string, date: string, deleted?: RecipeDiaryEntry): void;
 }) {
   const session = useFoodDiary();
   const snapshot = recipe
@@ -97,13 +97,14 @@ export function RecipeLog({
     operation: (state: FoodState) => FoodState,
     message: string,
     destination: string,
+    deleted?: RecipeDiaryEntry,
   ) {
     if (!session || saving.current) return;
     setError('');
     saving.current = true;
     try {
       await session.change(operation);
-      onSaved(message, destination);
+      onSaved(message, destination, deleted);
     } catch (error) {
       setConfirm(false);
       setError(describeError(error));
@@ -260,6 +261,7 @@ export function RecipeLog({
                 (state) => deleteRecipeEntry(state, entry),
                 'Запись удалена.',
                 entry.date,
+                entry,
               )
             }
           />

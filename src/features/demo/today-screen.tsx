@@ -1,9 +1,10 @@
 import { Touchable } from '@/components/touchable';
-import { useState } from 'react';
+import { use, useState, type ReactNode } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { AppText } from '@/components/app-text';
-import { IconButton } from '@/components/buttons';
+import { IconButton, PrimaryButton } from '@/components/buttons';
+import { ActionNotice } from '@/components/action-notice';
 import { Card } from '@/components/card';
 import { useComingSoon } from '@/components/coming-soon';
 import { DateSelector } from '@/components/date-selector';
@@ -35,6 +36,18 @@ import { dateKey, entryNutrition, parseDateKey } from '@/features/food/domain';
 import { NutritionValues } from '@/features/food/nutrition-values';
 import type { FoodDiaryEntry } from '@/features/food/model';
 import { formatFoodQuantity } from '@/features/food/units';
+import { AppSettingsContext } from '@/features/settings/app-settings-context';
+import {
+  defaultPersonalization,
+  greetingFor,
+  type HomeCard,
+} from '@/features/settings/personalization';
+import { SmartMealScreen } from '@/features/smart/smart-meal-screen';
+import { restoreEntry } from '@/features/food/operations';
+import { useLocalAction } from '@/features/smart/use-local-action';
+import { useNutrition } from '@/features/nutrition/nutrition-context';
+import { coachNotes } from '@/features/smart/activity';
+import { AwardNotice } from '@/features/smart/award-notice';
 
 const quickActions: readonly { label: string; icon: AppIconName }[] = [
   { label: 'Добавить еду', icon: 'Utensils' },
@@ -46,6 +59,11 @@ const quickActions: readonly { label: string; icon: AppIconName }[] = [
 export function TodayScreen() {
   const [calculator, setCalculator] = useState(false);
   const diary = useFoodDiary();
+  const [smartMeal, setSmartMeal] = useState(false);
+  const action = useLocalAction();
+  const prefs =
+    use(AppSettingsContext)?.settings.personalization ?? defaultPersonalization;
+  const nutrition = useNutrition();
   const [food, setFood] = useState<{ entry?: FoodDiaryEntry } | null>(null);
   const [foodNotice, setFoodNotice] = useState('');
   const profile = useProfile()?.state.profile;
@@ -56,21 +74,176 @@ export function TodayScreen() {
   const isToday = sameDay(today, selectedDate);
   const day = getDemoDay(isToday);
 
-  const detail = calculator ? (
-    <CalculatorScreen onClose={() => setCalculator(false)} />
-  ) : food ? (
-    <FoodFlow
-      date={dateKey(selectedDate)}
-      entry={food.entry}
-      onClose={() => setFood(null)}
-      onLogged={(message, date) => {
-        selectDate(parseDateKey(date));
-        setFoodNotice(message);
-        setFood(null);
-      }}
-    />
-  ) : null;
+  const detail =
+    smartMeal && diary ? (
+      <SmartMealScreen
+        session={diary}
+        date={dateKey(selectedDate)}
+        onBack={() => setSmartMeal(false)}
+      />
+    ) : calculator ? (
+      <CalculatorScreen onClose={() => setCalculator(false)} />
+    ) : food ? (
+      <FoodFlow
+        date={dateKey(selectedDate)}
+        entry={food.entry}
+        onClose={() => setFood(null)}
+        onLogged={(message, date, deleted) => {
+          selectDate(parseDateKey(date));
+          if (deleted && diary) {
+            action.announce(
+              message,
+              () =>
+                void action.run(
+                  () => diary.change((state) => restoreEntry(state, deleted)),
+                  'Запись восстановлена.',
+                ),
+            );
+            setFoodNotice('');
+          } else {
+            action.clear();
+            setFoodNotice(message);
+          }
+          setFood(null);
+        }}
+      />
+    ) : null;
 
+  const cards: Record<HomeCard, ReactNode> = {
+    recent: diary && (
+      <View style={styles.group}>
+        <SectionHeader title="Последние продукты" />
+        {diary.state.entries
+          .filter((e) => e.date === dateKey(selectedDate))
+          .slice(-3)
+          .reverse()
+          .map((entry) => (
+            <Card key={entry.id}>
+              <AppText variant="action">
+                {entry.product.name} ·{' '}
+                {entry.recipe && entry.unit === 'serving'
+                  ? `${formatFoodQuantity(entry.amount)} порц.`
+                  : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+              </AppText>
+              <NutritionValues values={entryNutrition(entry)} />
+              <IconButton
+                icon="ChevronRight"
+                label={`Открыть запись: ${entry.product.name}`}
+                onPress={() => setFood({ entry })}
+              />
+            </Card>
+          ))}
+        {!diary.state.entries.some((e) => e.date === dateKey(selectedDate)) && (
+          <AppText tone="muted">
+            В выбранный день пока нет записей питания.
+          </AppText>
+        )}
+      </View>
+    ),
+    stats: (
+      <View
+        style={[
+          styles.stats,
+          (width < 360 || fontScale > 1.5) && styles.statsStacked,
+        ]}
+      >
+        <StatCard
+          label="Текущий вес"
+          icon="Scale"
+          value={`${formatNumber(profile?.body.currentWeightKg ?? demoWeight.current)} кг`}
+          detail={`Цель ${formatNumber(profile?.goals.targetWeightKg ?? demoWeight.goal)} кг`}
+        />
+        <Card style={styles.water}>
+          <MacroProgressBar label="Вода" {...day.water} tone="water" />
+          <IconButton
+            label="Добавить воду"
+            icon="Plus"
+            onPress={() => showComingSoon('Добавить воду')}
+          />
+        </Card>
+      </View>
+    ),
+    goal: profile && (
+      <Card>
+        <SectionHeader title={goalLabels[profile.goals.kind]} />
+        <AppText>
+          До целевого веса:{' '}
+          {formatNumber(
+            Math.abs(
+              profile.goals.targetWeightKg - profile.body.currentWeightKg,
+            ),
+          )}{' '}
+          кг
+        </AppText>
+        <AppText variant="caption" tone="muted">
+          Вес указан в профиле. Дневник веса появится позже.
+        </AppText>
+      </Card>
+    ),
+    training: (
+      <View style={styles.group}>
+        <SectionHeader title="Тренировка" />
+        <EmptyState
+          title={isToday ? demoTraining.next : 'Нет тренировки'}
+          description={
+            isToday
+              ? demoTraining.description
+              : 'На выбранную дату тренировок нет.'
+          }
+          icon="Dumbbell"
+          action={
+            isToday ? (
+              <IconButton
+                label="Начать тренировку"
+                icon="Play"
+                onPress={() => showComingSoon('Начать тренировку')}
+              />
+            ) : undefined
+          }
+        />
+      </View>
+    ),
+    actions: (
+      <View style={styles.group}>
+        <SectionHeader title="Быстрые действия" />
+        <View style={styles.actions}>
+          {quickActions.map(({ label, icon }) => (
+            <Touchable
+              key={label}
+              accessibilityRole="button"
+              onPress={() =>
+                label === 'Добавить еду' && diary
+                  ? setFood({})
+                  : showComingSoon(label)
+              }
+              style={({ pressed }) => [
+                styles.action,
+                {
+                  backgroundColor: pressed
+                    ? colors.accentSurface
+                    : colors.surface,
+                },
+                fontScale > 1.5 && styles.fullAction,
+              ]}
+            >
+              <AppIcon name={icon} size={19} />
+              <AppText variant="action" style={styles.actionLabel}>
+                {label}
+              </AppText>
+            </Touchable>
+          ))}
+        </View>
+      </View>
+    ),
+  };
+  const note =
+    diary && prefs.motivation && !diary.loading && !diary.failure
+      ? coachNotes(
+          diary.state.entries,
+          dateKey(selectedDate),
+          nutrition?.snapshot?.targets,
+        )[0]
+      : undefined;
   return (
     <ScreenStack detail={detail}>
       <ScreenContainer>
@@ -84,16 +257,23 @@ export function TodayScreen() {
           </AppText>
           <AppHeader
             title={sectionTitles.index}
-            subtitle={profile ? `Привет, ${profile.personal.name}!` : 'Привет!'}
+            subtitle={greetingFor(prefs, profile?.personal.name)}
           />
         </View>
         <DateSelector date={selectedDate} today={today} onChange={selectDate} />
         {diary && <DiaryStatus />}
-        {!!foodNotice && (
-          <AppText accessibilityRole="status" accessibilityLiveRegion="polite">
-            {foodNotice}
-          </AppText>
-        )}
+        <AwardNotice />
+        <ActionNotice
+          message={
+            action.message ??
+            (foodNotice ? { text: foodNotice, kind: 'success' } : null)
+          }
+          pending={diary?.pending}
+          dismiss={() => {
+            action.clear();
+            setFoodNotice('');
+          }}
+        />
         <View style={styles.group}>
           {profile ? (
             <NutritionSummary dominant onOpen={() => setCalculator(true)} />
@@ -107,73 +287,21 @@ export function TodayScreen() {
           )}
         </View>
         {diary && (
-          <View style={styles.group}>
-            <SectionHeader title="Последние продукты" />
-            {diary.state.entries
-              .filter((e) => e.date === dateKey(selectedDate))
-              .slice(-3)
-              .reverse()
-              .map((entry) => (
-                <Card key={entry.id}>
-                  <AppText variant="action">
-                    {entry.product.name} ·{' '}
-                    {entry.recipe && entry.unit === 'serving'
-                      ? `${formatFoodQuantity(entry.amount)} порц.`
-                      : `${formatFoodQuantity(entry.grams ?? 0)} г`}
-                  </AppText>
-                  <NutritionValues values={entryNutrition(entry)} />
-                  <IconButton
-                    icon="ChevronRight"
-                    label={`Открыть запись: ${entry.product.name}`}
-                    onPress={() => setFood({ entry })}
-                  />
-                </Card>
-              ))}
-            {!diary.state.entries.some(
-              (e) => e.date === dateKey(selectedDate),
-            ) && (
-              <AppText tone="muted">
-                В выбранный день пока нет записей питания.
-              </AppText>
-            )}
-          </View>
-        )}
-        <View
-          style={[
-            styles.stats,
-            (width < 360 || fontScale > 1.5) && styles.statsStacked,
-          ]}
-        >
-          <StatCard
-            label="Текущий вес"
-            icon="Scale"
-            value={`${formatNumber(profile?.body.currentWeightKg ?? demoWeight.current)} кг`}
-            detail={`Цель ${formatNumber(profile?.goals.targetWeightKg ?? demoWeight.goal)} кг`}
-          />
-          <Card style={styles.water}>
-            <MacroProgressBar label="Вода" {...day.water} tone="water" />
-            <IconButton
-              label="Добавить воду"
-              icon="Plus"
-              onPress={() => showComingSoon('Добавить воду')}
-            />
-          </Card>
-        </View>
-        {profile && (
           <Card>
-            <SectionHeader title={goalLabels[profile.goals.kind]} />
-            <AppText>
-              До целевого веса:{' '}
-              {formatNumber(
-                Math.abs(
-                  profile.goals.targetWeightKg - profile.body.currentWeightKg,
-                ),
-              )}{' '}
-              кг
-            </AppText>
-            <AppText variant="caption" tone="muted">
-              Вес указан в профиле. Дневник веса появится позже.
-            </AppText>
+            {note && <AppText tone="muted">{note}</AppText>}
+            <PrimaryButton
+              icon="Plus"
+              label="Быстро добавить еду"
+              disabled={diary.loading || !!diary.failure}
+              onPress={() => setFood({})}
+            />
+            <PrimaryButton
+              secondary
+              icon="Utensils"
+              label="Подобрать блюдо"
+              disabled={diary.loading || !!diary.failure}
+              onPress={() => setSmartMeal(true)}
+            />
           </Card>
         )}
         {profile && (
@@ -181,57 +309,11 @@ export function TodayScreen() {
             {demoLabel}: вода и тренировки
           </AppText>
         )}
-        <View style={styles.group}>
-          <SectionHeader title="Тренировка" />
-          <EmptyState
-            title={isToday ? demoTraining.next : 'Нет тренировки'}
-            description={
-              isToday
-                ? demoTraining.description
-                : 'На выбранную дату тренировок нет.'
-            }
-            icon="Dumbbell"
-            action={
-              isToday ? (
-                <IconButton
-                  label="Начать тренировку"
-                  icon="Play"
-                  onPress={() => showComingSoon('Начать тренировку')}
-                />
-              ) : undefined
-            }
-          />
-        </View>
-        <View style={styles.group}>
-          <SectionHeader title="Быстрые действия" />
-          <View style={styles.actions}>
-            {quickActions.map(({ label, icon }) => (
-              <Touchable
-                key={label}
-                accessibilityRole="button"
-                onPress={() =>
-                  label === 'Добавить еду' && diary
-                    ? setFood({})
-                    : showComingSoon(label)
-                }
-                style={({ pressed }) => [
-                  styles.action,
-                  {
-                    backgroundColor: pressed
-                      ? colors.accentSurface
-                      : colors.surface,
-                  },
-                  fontScale > 1.5 && styles.fullAction,
-                ]}
-              >
-                <AppIcon name={icon} size={19} />
-                <AppText variant="action" style={styles.actionLabel}>
-                  {label}
-                </AppText>
-              </Touchable>
-            ))}
-          </View>
-        </View>
+        {prefs.order
+          .filter((id) => !prefs.hidden.includes(id) && cards[id])
+          .map((id) => (
+            <View key={id}>{cards[id]}</View>
+          ))}
       </ScreenContainer>
     </ScreenStack>
   );

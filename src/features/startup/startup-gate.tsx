@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { StatusScreen } from '@/components/status-screen';
 import {
@@ -13,6 +13,8 @@ import {
 } from '@/features/settings/app-settings';
 
 import { initializeApp } from './initialize-app';
+import { LaunchBrand } from './launch-brand';
+import { useAppTheme } from '@/theme';
 
 type StartupState =
   | { status: 'loading' }
@@ -23,6 +25,7 @@ type StartupState =
 export function StartupGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<StartupState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const { colors } = useAppTheme();
 
   useEffect(() => {
     let active = true;
@@ -72,22 +75,28 @@ export function StartupGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (state.status === 'loading') {
-    return <StatusScreen title="Загрузка приложения…" loading />;
-  }
-
   return (
-    <AppSettingsProvider
-      initialSettings={
-        state.status === 'ready' ? state.settings : defaultAppSettings
-      }
-      storageRecovery={
-        state.status === 'limited'
-          ? { retry, pending: state.retrying, message: state.message }
-          : undefined
-      }
-    >
-      {children}
-    </AppSettingsProvider>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      {state.status !== 'loading' && (
+        <AppSettingsProvider
+          initialSettings={
+            state.status === 'ready' ? state.settings : defaultAppSettings
+          }
+          storageRecovery={
+            state.status === 'limited'
+              ? { retry, pending: state.retrying, message: state.message }
+              : undefined
+          }
+        >
+          {children}
+        </AppSettingsProvider>
+      )}
+      {attempt === 0 && <LaunchBrand loaded={state.status !== 'loading'} />}
+      {attempt > 0 && state.status === 'loading' && (
+        <StatusScreen title="Загрузка приложения…" loading />
+      )}
+    </View>
   );
 }
+
+const styles = StyleSheet.create({ root: { flex: 1 } });

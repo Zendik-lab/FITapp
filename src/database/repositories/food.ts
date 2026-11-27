@@ -16,6 +16,7 @@ import {
 } from '@/features/food/domain';
 import { positive, validateRecipe } from '@/features/recipes/domain';
 import type { Recipe } from '@/features/recipes/model';
+import { positiveValue, validPantry } from '@/features/smart/model';
 
 const key = 'food_diary_state';
 function record(value: unknown): value is Record<string, unknown> {
@@ -111,6 +112,14 @@ function recipeEntry(e: Record<string, unknown>): boolean {
     !e.product.name.trim() ||
     !record(snapshot) ||
     !validNutrition(snapshot.total) ||
+    (snapshot.ingredients !== undefined &&
+      (!Array.isArray(snapshot.ingredients) ||
+        !snapshot.ingredients.every(
+          (item: unknown) =>
+            record(item) &&
+            typeof item.id === 'string' &&
+            positiveValue(item.grams),
+        ))) ||
     !positiveNumber(snapshot.servings) ||
     (snapshot.cookedWeightGrams !== undefined &&
       !positiveNumber(snapshot.cookedWeightGrams)) ||
@@ -163,6 +172,15 @@ function valid(value: unknown): value is FoodState {
   if (
     !record(value) ||
     value.version !== 1 ||
+    (value.pantry !== undefined && !validPantry(value.pantry)) ||
+    (value.milestones !== undefined &&
+      (!record(value.milestones) ||
+        Object.values(value.milestones).some(
+          (date) =>
+            typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date),
+        ))) ||
+    (value.productSearchHistory !== undefined &&
+      !strings(value.productSearchHistory)) ||
     !Array.isArray(value.products) ||
     !Array.isArray(value.entries) ||
     !Array.isArray(value.favorites) ||
@@ -195,6 +213,8 @@ function valid(value: unknown): value is FoodState {
         !['g', 'ml', 'piece', 'serving'].includes(String(e.unit)) ||
         typeof e.createdAt !== 'string'
       )
+        return false;
+      if (e.copiedFrom !== undefined && typeof e.copiedFrom !== 'string')
         return false;
       try {
         if (dateKey(parseDateKey(e.date)) !== e.date) return false;

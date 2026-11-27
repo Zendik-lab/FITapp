@@ -11,10 +11,12 @@ export function ProgressRing({
   value,
   goal,
   size = 108,
+  label = 'Выполнение дневной цели',
 }: {
   value: number;
   goal: number;
   size?: number;
+  label?: string;
 }) {
   const { colors } = useAppTheme();
   const ratio = goal > 0 ? Math.max(0, value / goal) : 0;
@@ -27,7 +29,11 @@ export function ProgressRing({
     <View
       accessible
       accessibilityRole="image"
-      accessibilityLabel={`Выполнено ${Math.round(ratio * 100)} процентов дневной цели`}
+      accessibilityLabel={
+        label === 'Выполнение дневной цели'
+          ? `Выполнено ${Math.round(ratio * 100)} процентов дневной цели`
+          : `${label}, ${Math.round(ratio * 100)} процентов`
+      }
     >
       <Svg width={size} height={size}>
         <Circle

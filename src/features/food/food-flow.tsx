@@ -31,7 +31,7 @@ export function FoodFlow({
   entry?: FoodDiaryEntry;
   scan?: boolean;
   onClose(): void;
-  onLogged(message: string, date: string): void;
+  onLogged(message: string, date: string, deleted?: FoodDiaryEntry): void;
 }) {
   const [page, setPage] = useState<Page>(() =>
     entry && !entry.recipe

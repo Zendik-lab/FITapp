@@ -7,6 +7,8 @@ export interface FoodSession {
   loading: boolean;
   pending: boolean;
   failure: string | null;
+  award?: { label: string; key: string };
+  dismissAward?(): void;
   change(operation: (state: FoodState) => FoodState): Promise<void>;
   reload(): Promise<void>;
 }

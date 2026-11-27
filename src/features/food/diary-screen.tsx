@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { AppText } from '@/components/app-text';
+import { ActionNotice } from '@/components/action-notice';
 import { IconButton, PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
 import { CalendarPicker } from '@/components/calendar-picker';
@@ -11,18 +12,22 @@ import { ScreenStack } from '@/components/screen-stack';
 import { useSelectedDate } from '@/features/calendar/selected-date';
 import { NutritionSummary } from '@/features/nutrition/nutrition-summary';
 import { CalculatorScreen } from '@/features/nutrition/calculator-screen';
-import { sameDay } from '@/features/calendar/calendar';
-import { describeError } from '@/database/storage-diagnostics';
+import { addDays, sameDay } from '@/features/calendar/calendar';
 import { spacing } from '@/theme';
 import { dateKey, entryNutrition, parseDateKey, sumEntries } from './domain';
 import { useFoodDiary } from './food-context';
 import { FoodFlow } from './food-flow';
 import { meals, type FoodDiaryEntry, type MealType } from './model';
 import { NutritionValues } from './nutrition-values';
-import { copyMeal } from './operations';
+import { copyDay, removeEntry, restoreEntry } from './operations';
 import { DiaryStatus } from './diary-status';
 import { formatFoodQuantity } from './units';
 import { RecipeFlow } from '@/features/recipes/recipe-flow';
+import { useLocalAction } from '@/features/smart/use-local-action';
+import { PantryScreen } from '@/features/smart/pantry-screen';
+import { CompareBudgetScreen } from '@/features/smart/compare-budget-screen';
+import { DiaryRow } from './diary-row';
+import { AwardNotice } from '@/features/smart/award-notice';
 
 export function DiaryScreen() {
   const session = useFoodDiary();
@@ -35,18 +40,74 @@ export function DiaryScreen() {
   const [calculator, setCalculator] = useState(false);
   const [recipes, setRecipes] = useState(false);
   const [updated, setUpdated] = useState(false);
-  const [copying, setCopying] = useState<MealType | null>(null);
-  const [notice, setNotice] = useState('');
+  const [copying, setCopying] = useState<MealType | 'day' | null>(null);
+  const [tools, setTools] = useState(false);
+  const [panel, setPanel] = useState<
+    'compare' | 'budget' | 'fridge' | 'shopping'
+  >();
+  const action = useLocalAction();
   const date = dateKey(selectedDate);
   const disabled =
     !session || session.loading || session.pending || !!session.failure;
-  function onLogged(message: string, destination: string) {
+  const undo = (entry: FoodDiaryEntry) => () => {
+    if (session)
+      void action.run(
+        () => session.change((state) => restoreEntry(state, entry)),
+        'Запись восстановлена.',
+      );
+  };
+  function deleteRow(entry: FoodDiaryEntry) {
+    if (session)
+      void action.run(
+        () => session.change((state) => removeEntry(state, entry.id, entry)),
+        'Запись удалена.',
+        undo(entry),
+      );
+  }
+  function copy(from: string, to: string, meal?: MealType) {
+    if (!session) return;
+    let copied = 0;
+    void action.run(async () => {
+      await session.change((state) => {
+        const next = copyDay(state, from, to, meal);
+        copied = next.entries.length - state.entries.length;
+        return next;
+      });
+      action.announce(
+        copied
+          ? `${meal ? 'Приём пищи скопирован' : 'Рацион скопирован'} на ${to}. Записей: ${copied}.`
+          : 'Новых записей для копирования нет.',
+      );
+    });
+  }
+  function onLogged(
+    message: string,
+    destination: string,
+    deleted?: FoodDiaryEntry,
+  ) {
     selectDate(parseDateKey(destination));
-    setNotice(message);
+    action.announce(message, deleted ? undo(deleted) : undefined, !!deleted);
     setFlow(null);
     setRecipes(false);
   }
   function renderDetail() {
+    if (session && (panel === 'fridge' || panel === 'shopping'))
+      return (
+        <PantryScreen
+          session={session}
+          mode={panel}
+          onBack={() => setPanel(undefined)}
+        />
+      );
+    if (session && (panel === 'budget' || panel === 'compare'))
+      return (
+        <CompareBudgetScreen
+          session={session}
+          date={date}
+          mode={panel}
+          onBack={() => setPanel(undefined)}
+        />
+      );
     if (calculator)
       return (
         <CalculatorScreen
@@ -111,11 +172,12 @@ export function DiaryScreen() {
           />
         )}
         <DiaryStatus />
-        {!!notice && (
-          <AppText accessibilityRole="status" accessibilityLiveRegion="polite">
-            {notice}
-          </AppText>
-        )}
+        <AwardNotice />
+        <ActionNotice
+          message={action.message}
+          pending={session?.pending}
+          dismiss={action.clear}
+        />
         {updated && (
           <AppText tone="accentText" accessibilityLiveRegion="polite">
             Цели питания сохранены.
@@ -134,6 +196,52 @@ export function DiaryScreen() {
           disabled={disabled}
           onPress={() => setRecipes(true)}
         />
+        <PrimaryButton
+          secondary
+          label="Инструменты питания"
+          expanded={tools}
+          onPress={() => setTools(!tools)}
+        />
+        {tools && (
+          <Card>
+            <PrimaryButton
+              secondary
+              label="Умный холодильник"
+              disabled={disabled}
+              onPress={() => setPanel('fridge')}
+            />
+            <PrimaryButton
+              secondary
+              label="Сравнение продуктов"
+              disabled={disabled}
+              onPress={() => setPanel('compare')}
+            />
+            <PrimaryButton
+              secondary
+              label="Покупки"
+              disabled={disabled}
+              onPress={() => setPanel('shopping')}
+            />
+            <PrimaryButton
+              secondary
+              label="Бюджет питания"
+              disabled={disabled}
+              onPress={() => setPanel('budget')}
+            />
+            <PrimaryButton
+              secondary
+              label="Скопировать вчерашний рацион"
+              disabled={disabled || !sameDay(selectedDate, today)}
+              onPress={() => copy(dateKey(addDays(selectedDate, -1)), date)}
+            />
+            <PrimaryButton
+              secondary
+              label="Скопировать рацион на дату"
+              disabled={disabled}
+              onPress={() => setCopying('day')}
+            />
+          </Card>
+        )}
         <SectionHeader title="Дневник питания" />
         {Object.entries(meals).map(([key, title]) => {
           const meal = key as MealType;
@@ -151,21 +259,34 @@ export function DiaryScreen() {
                 </AppText>
               )}
               {entries.map((entry) => (
-                <View key={entry.id} style={styles.entry}>
-                  <AppText variant="action">{entry.product.name}</AppText>
-                  <AppText variant="caption" tone="muted">
-                    {entry.unit === 'serving' && entry.recipe
-                      ? `${formatFoodQuantity(entry.amount)} порц.`
-                      : `${formatFoodQuantity(entry.grams ?? 0)} г`}
-                  </AppText>
-                  <NutritionValues values={entryNutrition(entry)} />
-                  <PrimaryButton
-                    secondary
-                    label={`Изменить запись: ${entry.product.name}`}
-                    onPress={() => setFlow({ entry })}
-                    disabled={disabled}
-                  />
-                </View>
+                <DiaryRow
+                  key={entry.id}
+                  disabled={disabled}
+                  onEdit={() => setFlow({ entry })}
+                  onRemove={() => deleteRow(entry)}
+                >
+                  <View style={styles.entry}>
+                    <AppText variant="action">{entry.product.name}</AppText>
+                    <AppText variant="caption" tone="muted">
+                      {entry.unit === 'serving' && entry.recipe
+                        ? `${formatFoodQuantity(entry.amount)} порц.`
+                        : `${formatFoodQuantity(entry.grams ?? 0)} г`}
+                    </AppText>
+                    <NutritionValues values={entryNutrition(entry)} />
+                    <PrimaryButton
+                      secondary
+                      label={`Изменить запись: ${entry.product.name}`}
+                      onPress={() => setFlow({ entry })}
+                      disabled={disabled}
+                    />
+                    <PrimaryButton
+                      secondary
+                      label={`Удалить запись: ${entry.product.name}`}
+                      disabled={disabled}
+                      onPress={() => deleteRow(entry)}
+                    />
+                  </View>
+                </DiaryRow>
               ))}
               <PrimaryButton
                 secondary
@@ -192,13 +313,7 @@ export function DiaryScreen() {
           onDismiss={() => setCopying(null)}
           onChange={(to) => {
             if (!session || !copying) return;
-            const meal = copying;
-            void session
-              .change((s) => copyMeal(s, date, meal, dateKey(to)))
-              .then(
-                () => setNotice(`Приём пищи скопирован на ${dateKey(to)}.`),
-                (error: unknown) => setNotice(describeError(error)),
-              );
+            copy(date, dateKey(to), copying === 'day' ? undefined : copying);
           }}
         />
       </ScreenContainer>

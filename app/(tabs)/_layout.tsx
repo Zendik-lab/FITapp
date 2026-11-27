@@ -8,7 +8,7 @@ import { AppIcon, type AppIconName } from '@/components/app-icon';
 import { sectionTitles } from '@/constants/sections';
 import { SelectedDateProvider } from '@/features/calendar/selected-date';
 import { PwaProvider } from '@/features/pwa/pwa-status';
-import { tabFeedback } from '@/features/pwa/tab-feedback';
+import { useHapticFeedback } from '@/features/settings/feedback';
 import { StartupGate } from '@/features/startup/startup-gate';
 import { ProfileProvider } from '@/features/profile/profile-provider';
 import { OnboardingGate } from '@/features/profile/onboarding-screen';
@@ -57,6 +57,7 @@ export default function TabLayout() {
 }
 
 function AppTabs() {
+  const feedback = useHapticFeedback();
   const { colors } = useAppTheme();
   const reduced = useReducedMotion();
   const web = Platform.OS === 'web';
@@ -88,7 +89,7 @@ function AppTabs() {
       screenListeners={({ navigation }) => ({
         tabPress: (event) => {
           if (!event.defaultPrevented && !navigation.isFocused()) {
-            tabFeedback();
+            feedback('selection');
           }
         },
       })}

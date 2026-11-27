@@ -33,6 +33,7 @@ import {
 } from './model';
 import { NutritionValues } from './nutrition-values';
 import { formatNumber } from '@/features/calendar/calendar';
+import { useHapticFeedback } from '@/features/settings/feedback';
 
 export function ProductDetail({
   product,
@@ -48,10 +49,15 @@ export function ProductDetail({
   date: string;
   meal: MealType;
   onBack(): void;
-  onSaved(message: string, destination: string): void;
+  onSaved(
+    message: string,
+    destination: string,
+    deleted?: ProductDiaryEntry,
+  ): void;
   onEdit(product: FoodProduct): void;
 }) {
   const session = useFoodDiary();
+  const feedback = useHapticFeedback();
   const [amount, setAmount] = useState(String(entry?.amount ?? 100));
   const [unit, setUnit] = useState<FoodUnit>(entry?.unit ?? 'g');
   const [selectedMeal, setMeal] = useState(entry?.meal ?? meal);
@@ -74,11 +80,19 @@ export function ProductDetail({
   } catch {
     /* Invalid text remains editable; save reports correction. */
   }
-  async function perform(action: () => Promise<void>, message?: string) {
+  async function perform(
+    action: () => Promise<void>,
+    message?: string,
+    destination = date,
+    deleted?: ProductDiaryEntry,
+  ) {
     setFailure('');
     try {
       await action();
-      if (message) onSaved(message, date);
+      if (message) {
+        if (!deleted) feedback('success');
+        onSaved(message, destination, deleted);
+      }
     } catch (error) {
       setFailure(describeError(error));
     }
@@ -105,6 +119,7 @@ export function ProductDetail({
       entry && !copy
         ? 'Запись питания обновлена.'
         : 'Продукт добавлен в дневник.',
+      selectedDate,
     );
   }
   return (
@@ -270,10 +285,12 @@ export function ProductDetail({
                 () =>
                   session.change((s) =>
                     confirm === 'entry' && entry
-                      ? removeEntry(s, entry.id)
+                      ? removeEntry(s, entry.id, entry)
                       : deleteProduct(s, product.id),
                   ),
                 entry ? 'Запись удалена.' : 'Продукт удалён.',
+                entry?.date ?? date,
+                entry,
               );
           }}
         />

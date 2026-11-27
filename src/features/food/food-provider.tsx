@@ -7,12 +7,23 @@ import { useProfile } from '@/features/profile/profile-context';
 import { builtinFoods } from './catalog';
 import { FoodContext } from './food-context';
 import { emptyFoodState, type FoodState } from './model';
+import { dateKey, sumEntries } from './domain';
+import {
+  achievements,
+  historicalMilestones,
+  reachesGoal,
+} from '@/features/smart/activity';
+import { useNutrition } from '@/features/nutrition/nutrition-context';
+import { useHapticFeedback } from '@/features/settings/feedback';
 
 export function FoodProvider({ children }: { children: ReactNode }) {
   const profile = useProfile();
   return profile ? <StoredFood>{children}</StoredFood> : children;
 }
 function StoredFood({ children }: { children: ReactNode }) {
+  const nutrition = useNutrition();
+  const haptic = useHapticFeedback();
+  const [award, setAward] = useState<FoodSessionAward>();
   const [state, setState] = useState(emptyFoodState);
   const products = useMemo(
     () => [...builtinFoods, ...state.products],
@@ -58,10 +69,61 @@ function StoredFood({ children }: { children: ReactNode }) {
       throw new Error('Сначала повторите загрузку дневника.');
     busy.current = true;
     setPending(true);
+    let rejectedOperation = false;
     try {
-      setState(await repository.current.change(operation));
+      let earned: FoodSessionAward | undefined;
+      const date = dateKey(new Date());
+      const target = nutrition?.issues.length
+        ? undefined
+        : nutrition?.snapshot?.targets;
+      setState(
+        await repository.current.change((current) => {
+          let next: FoodState;
+          try {
+            next = operation(current);
+          } catch (error) {
+            rejectedOperation = true;
+            throw error;
+          }
+          if (
+            next.entries === current.entries &&
+            next.recipes === current.recipes &&
+            next.milestones === current.milestones
+          )
+            return next;
+          const before = historicalMilestones(current, date);
+          const milestones = { ...before, ...historicalMilestones(next, date) };
+          const goalEvent =
+            target &&
+            current.entries !== next.entries &&
+            !reachesGoal(sumEntries(current.entries, date), target) &&
+            reachesGoal(sumEntries(next.entries, date), target) &&
+            milestones.lastGoalDay !== date;
+          if (goalEvent) {
+            milestones.firstGoal ??= date;
+            milestones.lastGoalDay = date;
+          }
+          const achievement = achievements.find(
+            ({ id }) => milestones[id] && !before[id],
+          );
+          if (goalEvent || achievement)
+            earned = {
+              key: goalEvent ? `goal:${date}` : (achievement?.id ?? date),
+              label: goalEvent
+                ? 'Дневная цель выполнена'
+                : (achievement?.title ?? ''),
+            };
+          return Object.keys(milestones).length
+            ? { ...next, milestones }
+            : next;
+        }),
+      );
+      if (earned) {
+        setAward(earned);
+        haptic('success');
+      }
     } catch (error) {
-      setFailure(describeError(error));
+      if (!rejectedOperation) setFailure(describeError(error));
       throw error;
     } finally {
       busy.current = false;
@@ -76,6 +138,8 @@ function StoredFood({ children }: { children: ReactNode }) {
         loading,
         pending,
         failure,
+        award,
+        dismissAward: () => setAward(undefined),
         change,
         reload,
       }}
@@ -84,3 +148,5 @@ function StoredFood({ children }: { children: ReactNode }) {
     </FoodContext>
   );
 }
+
+type FoodSessionAward = { key: string; label: string };

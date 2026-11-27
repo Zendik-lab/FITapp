@@ -1,4 +1,5 @@
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useDebouncedSearch } from '@/features/food/use-debounced-search';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -96,7 +97,7 @@ export function RecipeFlow({
   const { width } = useWindowDimensions();
   const [page, setPage] = useState<Page>({ kind: 'list' });
   const [query, setQuery] = useState('');
-  const search = useDeferredValue(query);
+  const search = useDebouncedSearch(query);
   const [section, setSection] =
     useState<NonNullable<RecipeFilters['section']>>('all');
   const [sort, setSort] = useState<RecipeSort>('relevance');

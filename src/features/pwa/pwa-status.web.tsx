@@ -14,6 +14,7 @@ import { PrimaryButton } from '@/components/buttons';
 import { Card } from '@/components/card';
 import { SectionHeader } from '@/components/headers';
 import { useAppTheme } from '@/theme';
+import { useReducedMotion } from '@/theme/motion';
 
 import { activateUpdate, wasUpdateInstalled } from './web-update';
 import { buildEnvironment, currentBuild } from './build-info';
@@ -113,6 +114,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const [updating, setUpdating] = useState(false);
   const activeUpdate = useRef(false);
   const { colors, isDark } = useAppTheme();
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     const root = document.documentElement;
@@ -124,6 +126,12 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', colors.background);
   }, [colors, isDark]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.toggleAttribute('data-motion-off', reducedMotion);
+    return () => root.removeAttribute('data-motion-off');
+  }, [reducedMotion]);
 
   useEffect(() => {
     const viewport = window.visualViewport;

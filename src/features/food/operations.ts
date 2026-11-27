@@ -6,6 +6,7 @@ import {
   validateProduct,
   sameBarcode,
 } from './domain';
+import { normalizeSearch } from './local-search';
 import type {
   FoodState,
   FoodProduct,
@@ -69,11 +70,28 @@ export function editEntry(
   return {
     ...state,
     entries: state.entries.map((e) =>
-      e.id === id ? { ...updated, id, createdAt: entry.createdAt } : e,
+      e.id === id
+        ? {
+            ...updated,
+            id,
+            createdAt: entry.createdAt,
+            copiedFrom: entry.copiedFrom,
+          }
+        : e,
     ),
   };
 }
-export function removeEntry(state: FoodState, id: string): FoodState {
+export function removeEntry(
+  state: FoodState,
+  id: string,
+  expected?: FoodDiaryEntry,
+): FoodState {
+  if (
+    expected &&
+    JSON.stringify(state.entries.find((row) => row.id === id)) !==
+      JSON.stringify(expected)
+  )
+    throw new Error('Запись изменилась. Откройте её заново.');
   return { ...state, entries: state.entries.filter((e) => e.id !== id) };
 }
 export function copyMeal(
@@ -82,19 +100,45 @@ export function copyMeal(
   meal: MealType,
   to: string,
 ): FoodState {
+  return copyDay(state, from, to, meal);
+}
+
+export function restoreEntry(
+  state: FoodState,
+  entry: FoodDiaryEntry,
+): FoodState {
+  if (state.entries.some((row) => row.id === entry.id)) return state;
+  return addEntry(state, entry);
+}
+
+export function copyDay(
+  state: FoodState,
+  from: string,
+  to: string,
+  meal?: MealType,
+): FoodState {
+  parseDateKey(from);
   parseDateKey(to);
+  if (from === to) return state;
+  const origins = new Set(
+    state.entries
+      .filter((entry) => entry.date === to)
+      .map((entry) => entry.copiedFrom ?? entry.id),
+  );
   return state.entries
-    .filter((e) => e.date === from && e.meal === meal)
-    .reduce(
-      (s, e) =>
-        addEntry(s, {
-          ...e,
-          id: newId(),
-          date: to,
-          createdAt: new Date().toISOString(),
-        }),
-      state,
-    );
+    .filter((entry) => entry.date === from && (!meal || entry.meal === meal))
+    .reduce((current, entry) => {
+      const origin = entry.copiedFrom ?? entry.id;
+      if (origins.has(origin)) return current;
+      origins.add(origin);
+      return addEntry(current, {
+        ...entry,
+        id: newId(),
+        date: to,
+        copiedFrom: origin,
+        createdAt: new Date().toISOString(),
+      });
+    }, state);
 }
 export function toggleFavorite(state: FoodState, productId: string): FoodState {
   return {
@@ -102,5 +146,23 @@ export function toggleFavorite(state: FoodState, productId: string): FoodState {
     favorites: state.favorites.some((f) => f.productId === productId)
       ? state.favorites.filter((f) => f.productId !== productId)
       : [...state.favorites, { productId }],
+  };
+}
+
+export function rememberProductQuery(
+  state: FoodState,
+  input: string,
+): FoodState {
+  const query = input.trim().replace(/\s+/g, ' ').slice(0, 120);
+  const normalized = normalizeSearch(query);
+  if (!normalized) return state;
+  return {
+    ...state,
+    productSearchHistory: [
+      query,
+      ...(state.productSearchHistory ?? []).filter(
+        (previous) => normalizeSearch(previous) !== normalized,
+      ),
+    ].slice(0, 8),
   };
 }

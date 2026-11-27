@@ -1,6 +1,7 @@
 import type { NutritionTargets } from '@/features/nutrition/engine';
 import type { Recipe, RecipeNutritionSnapshot } from '@/features/recipes/model';
 import type { FoodUnit } from './units';
+import type { SmartPantry } from '@/features/smart/model';
 
 export { unitLabels, type FoodUnit } from './units';
 
@@ -56,6 +57,7 @@ interface EntryBase {
   meal: MealType;
   amount: number;
   createdAt: string;
+  copiedFrom?: string;
 }
 export type ProductDiaryEntry = EntryBase & {
   product: FoodProduct;
@@ -67,7 +69,9 @@ export type RecipeDiaryEntry = EntryBase & {
   product: Pick<FoodProduct, 'id' | 'name'>;
   unit: 'g' | 'serving';
   grams: number | null;
-  recipe: RecipeNutritionSnapshot;
+  recipe: RecipeNutritionSnapshot & {
+    ingredients?: { id: string; grams: number }[];
+  };
 };
 export type FoodDiaryEntry = ProductDiaryEntry | RecipeDiaryEntry;
 export interface FavoriteFood {
@@ -86,6 +90,9 @@ export interface FoodState {
   recipes: Recipe[];
   favoriteRecipeIds?: string[];
   recipeSearchHistory?: string[];
+  productSearchHistory?: string[];
+  pantry?: SmartPantry;
+  milestones?: Record<string, string>;
 }
 export const emptyFoodState = (): FoodState => ({
   version: 1,

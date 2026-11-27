@@ -14,6 +14,7 @@ import { addEntry, removeEntry } from '@/features/food/operations';
 import { validateRecipe } from './domain';
 import type { Recipe } from './model';
 import { getBuiltinRecipe, hasBuiltinRecipe, isBuiltinRecipe } from './library';
+import { ingredientQuantities } from '@/features/smart/planning';
 
 function ensureCurrent(current: Recipe | undefined, expected: Recipe) {
   if (!current || JSON.stringify(current) !== JSON.stringify(expected))
@@ -134,6 +135,9 @@ export function addRecipeEntry(
     total: validateRecipe(recipe).total,
     servings: recipe.servings,
     cookedWeightGrams: recipe.cookedWeightGrams,
+    ingredients: ingredientQuantities(recipe.ingredients).map(
+      ({ id, grams }) => ({ id, grams }),
+    ),
   };
   return addEntry(
     state,
@@ -214,7 +218,13 @@ export function editRecipeEntry(
   );
   if (copyId) return addEntry(state, next);
   const entries = state.entries.map((entry) =>
-    entry.id === current.id ? { ...next, createdAt: current.createdAt } : entry,
+    entry.id === current.id
+      ? {
+          ...next,
+          createdAt: current.createdAt,
+          copiedFrom: current.copiedFrom,
+        }
+      : entry,
   );
   checkDayNutrition(entries, date);
   return { ...state, entries };

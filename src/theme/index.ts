@@ -41,6 +41,37 @@ const dark: typeof light = {
   error: '#FF9699',
 };
 
+const accents = {
+  blue: [
+    { accent: '#74B5FF', accentText: '#1255A2', accentSurface: '#E8F2FF' },
+    { accent: '#79B9FF', accentText: '#A1CEFF', accentSurface: '#172E49' },
+  ],
+  violet: [
+    { accent: '#C4A5FF', accentText: '#653F9B', accentSurface: '#F2EAFF' },
+    { accent: '#C6ABFF', accentText: '#D8C1FF', accentSurface: '#34264B' },
+  ],
+  orange: [
+    { accent: '#FFB975', accentText: '#813D06', accentSurface: '#FFF0E1' },
+    { accent: '#FFC187', accentText: '#FFC58E', accentSurface: '#412B1B' },
+  ],
+} as const;
+
+const palettes = {
+  green: [light, dark],
+  blue: [
+    { ...light, ...accents.blue[0] },
+    { ...dark, ...accents.blue[1] },
+  ],
+  violet: [
+    { ...light, ...accents.violet[0] },
+    { ...dark, ...accents.violet[1] },
+  ],
+  orange: [
+    { ...light, ...accents.orange[0] },
+    { ...dark, ...accents.orange[1] },
+  ],
+};
+
 export const typography = {
   title: {
     fontSize: 34,
@@ -86,8 +117,10 @@ export const contentWidth = 640;
 export const dialogWidth = 400;
 
 export function useAppTheme() {
-  const mode = use(AppSettingsContext)?.settings.themeMode ?? 'system';
+  const settings = use(AppSettingsContext)?.settings;
+  const mode = settings?.themeMode ?? 'system';
   const system = useColorScheme();
   const isDark = mode === 'system' ? system === 'dark' : mode === 'dark';
-  return { isDark, colors: isDark ? dark : light };
+  const accent = settings?.personalization?.accent ?? 'green';
+  return { isDark, colors: palettes[accent][isDark ? 1 : 0] };
 }

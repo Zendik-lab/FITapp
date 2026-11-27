@@ -245,6 +245,11 @@ test('создание, дробный ввод, избранное, общий 
     .getByRole('button', { name: 'Подтвердить удаление', exact: true })
     .click();
   expect((await state(page)).entries).toHaveLength(3);
+  await button(page, 'Отменить удаление').click();
+  await expect(
+    visible(page, page.getByText('Запись восстановлена.', { exact: true })),
+  ).toBeVisible();
+  expect((await state(page)).entries).toHaveLength(4);
   await page.setViewportSize({ width: 320, height: 568 });
   expect(
     await page.evaluate(
@@ -258,6 +263,161 @@ test('создание, дробный ввод, избранное, общий 
     fullPage: true,
   });
   expect(errors).toEqual([]);
+});
+
+test('инструменты питания и оформление сохраняются после холодного офлайн-запуска', async ({
+  page,
+  context,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await seed(page);
+  await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
+  await expect(
+    visible(page, page.getByText('Доступно без интернета', { exact: true })),
+  ).toBeVisible();
+  await button(page, 'Персонализация').click();
+  await visible(
+    page,
+    page.getByRole('radio', { name: 'Синий', exact: true }),
+  ).click();
+  await button(page, 'Выше: Быстрые действия').click();
+  await typeStable(page, 'Своё приветствие', 'Привет из офлайна');
+  await button(page, 'Сохранить оформление').click();
+  await expect(
+    visible(page, page.getByText('Оформление сохранено.', { exact: true })),
+  ).toBeVisible();
+  await button(page, 'Назад').click();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Инструменты питания').click();
+  await button(page, 'Умный холодильник').click();
+  await button(page, 'Добавить из каталога').click();
+  await typeStable(page, 'Название или штрихкод продукта', 'банан');
+  await button(page, 'Выбрать: Банан').click();
+  await expect(button(page, 'Сохранить количество')).toBeEnabled();
+  await button(page, 'Сохранить количество').click();
+  await expect(button(page, 'Изменить запас: Банан')).toBeVisible();
+  await button(page, 'Назад').click();
+  await button(page, 'Покупки').click();
+  await button(page, 'Добавить вручную').click();
+  await typeStable(page, 'Название покупки', 'Рис для покупок');
+  await button(page, 'Сохранить количество').click();
+  await expect(
+    button(page, 'Изменить количество: Рис для покупок'),
+  ).toBeVisible();
+  await button(page, 'Назад').click();
+  await button(page, 'Бюджет питания').click();
+  await typeStable(page, 'Дневной бюджет, ₸', '2500');
+  await button(page, 'Сохранить бюджет').click();
+  await expect(
+    visible(page, page.getByText('Бюджет сохранён.', { exact: true })),
+  ).toBeVisible();
+  await context.setOffline(true);
+  await page.goto(url);
+  await expect(
+    visible(page, page.getByText('Привет из офлайна', { exact: true })),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Инструменты питания').click();
+  await button(page, 'Покупки').click();
+  await expect(
+    button(page, 'Изменить количество: Рис для покупок'),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('локальные рекомендации, сравнение и отчёты доступны из основных вкладок', async ({
+  page,
+}) => {
+  await seed(page);
+  await page.getByRole('tab', { name: 'Сегодня', exact: true }).click();
+  await button(page, 'Подобрать блюдо').click();
+  const options = button(page, 'Добавить вариант в дневник');
+  await expect(options.first()).toBeEnabled();
+  await options.first().click();
+  await expect(
+    visible(
+      page,
+      page.getByText('Вариант добавлен в дневник.', { exact: true }),
+    ),
+  ).toBeVisible();
+  await button(page, 'Назад').click();
+  await page.getByRole('tab', { name: 'Прогресс', exact: true }).click();
+  await button(page, 'Недельный отчёт').click();
+  await expect(
+    visible(page, page.getByText('1 из 7 дней с записями', { exact: true })),
+  ).toBeVisible();
+  await button(page, 'Завершить просмотр отчёта').click();
+  await expect(
+    visible(
+      page,
+      page.getByText('Недельный отчёт просмотрен.', { exact: true }),
+    ),
+  ).toBeVisible();
+  await button(page, 'Назад').click();
+  await button(page, 'Mass Coach').click();
+  await expect(
+    visible(
+      page,
+      page.getByRole('heading', { name: 'Mass Coach', exact: true }),
+    ),
+  ).toBeVisible();
+  await button(page, 'Назад').click();
+  await button(page, 'FIT Wrapped').click();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: (data: ShareData) => data.files?.[0]?.type === 'image/png',
+    });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data: ShareData) => {
+        const file = data.files?.[0];
+        document.documentElement.dataset.wrappedShare = file
+          ? `${file.name}:${file.type}:${file.size}`
+          : data.text;
+      },
+    });
+  });
+  await button(page, 'Следующая карточка').click();
+  await expect(
+    visible(
+      page,
+      page.getByRole('heading', { name: 'Среднее КБЖУ', exact: true }),
+    ),
+  ).toBeVisible();
+  for (let index = 0; index < 3; index += 1) {
+    await button(page, 'Следующая карточка').click();
+  }
+  await button(page, 'Поделиться итогом').click();
+  await expect(page.locator('html')).not.toHaveAttribute('data-wrapped-share');
+  await button(page, 'Подтвердить отправку').click();
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-wrapped-share',
+    /^fit-wrapped\.png:image\/png:[1-9]\d+$/,
+  );
+  await button(page, 'Назад').click();
+  await button(page, 'Достижения').click();
+  await expect(
+    visible(page, page.getByText('Первый недельный отчёт', { exact: true })),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Инструменты питания').click();
+  await button(page, 'Сравнение продуктов').click();
+  for (const [query, name] of [
+    ['банан', 'Банан'],
+    ['яблоко', 'Яблоко'],
+  ]) {
+    await button(page, 'Выбрать продукт для сравнения').click();
+    await typeStable(page, 'Название или штрихкод продукта', query);
+    await button(page, `Выбрать: ${name}`).click();
+  }
+  await expect(
+    visible(
+      page,
+      page.getByRole('heading', { name: 'Сопоставление КБЖУ', exact: true }),
+    ),
+  ).toBeVisible();
 });
 test('офлайн CRUD, сохранение после двух перезапусков, история не меняется при правке продукта', async ({
   page,

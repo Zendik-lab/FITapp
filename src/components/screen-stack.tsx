@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { Animated, Platform, StyleSheet, View } from 'react-native';
 import { useAppTheme } from '@/theme';
-import { motion, useReducedMotion } from '@/theme/motion';
+import { motion, useMotionDistance, useReducedMotion } from '@/theme/motion';
 
 export function ScreenStack({
   children,
@@ -39,6 +39,7 @@ export function SceneTransition({
   style?: React.ComponentProps<typeof Animated.View>['style'];
 }) {
   const reduced = useReducedMotion();
+  const distance = useMotionDistance();
   const [progress] = useState(() => new Animated.Value(1));
   useLayoutEffect(() => {
     if (reduced) {
@@ -70,7 +71,7 @@ export function SceneTransition({
             {
               translateY: progress.interpolate({
                 inputRange: [0, 1],
-                outputRange: [5, 0],
+                outputRange: [distance, 0],
               }),
             },
           ],

@@ -94,11 +94,17 @@ textarea {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-motion-press],
-  :where(input, textarea) {
+  :root:not([data-motion-off]) [data-motion-press],
+  :root:not([data-motion-off]) :where(input, textarea) {
     transition-property: background-color, border-color, opacity, transform;
     transition-duration: var(--motion-press, 0ms);
     transition-timing-function: var(--motion-easing, ease-out);
+  }
+
+  :root:not([data-motion-off]),
+  :root:not([data-motion-off]) body {
+    transition: background-color var(--motion-press, 0ms)
+      var(--motion-easing, ease-out);
   }
 }
 
