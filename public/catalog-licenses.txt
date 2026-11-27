@@ -11,3 +11,11 @@ U.S. Department of Agriculture, Agricultural Research Service.
 FoodData Central, Standard Reference Legacy, April 2018.
 Source: https://fdc.nal.usda.gov/download-datasets/
 License: CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/
+
+Polish Wikibooks Cookbook contributors, via Open Recipe Corpus
+(Rippy1911), snapshot 86102603bac07d79b94bc35cba5b50346798cc09.
+Source: https://github.com/Rippy1911/open-recipe-corpus
+License: CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/
+Each recipe card credits the Wikibooks page and revision. MassTracker
+translated the selected recipes into Russian, adapted ingredient
+descriptions, converted units and recalculated nutrition.

@@ -6,7 +6,7 @@ garlic	garlic	169230	Чеснок сырой	clove	tsp
 tomato|tomatoes	tomato|tomatoes|ripe tomatoes	170457	Помидоры спелые сырые	medium whole (2-3/5" dia)			
 egg|eggs	egg|eggs|whole egg|egg for glazing	171287	Яйцо куриное свежее (USDA)	large			
 yolks|eggyolk|eggyolks	egg yolks|egg yolk	172184	Яичный желток сырой (USDA)	large			
-butter	butter|unsalted butter|butter for frying	173430	Масло сливочное несолёное			tbsp	
+butter	butter|unsalted butter|butter for frying	173430	Масло сливочное несолёное			tbsp	cup:236.5882365
 flour	flour|plain flour|wheat flour|all-purpose flour	168936	Мука пшеничная общего назначения			@cup/16	
 sugar	sugar|white sugar|granulated sugar	169655	Сахар-песок (USDA)		tsp	@cup/16	
 potato|potatoes	potato|potatoes	170026	Картофель сырой с кожурой	Potato medium (2-1/4" to 3-1/4" dia)			
@@ -30,7 +30,7 @@ pepper|peppers	bell peppers|bell pepper|red bell pepper|red pepper	170108	Пер
 greenpepper|pepper|peppers	green peppers|green bell pepper	170427	Перец сладкий зелёный сырой	medium (approx 2-3/4" long, 2-1/2 dia.)		tbsp	
 paprika	paprika|sweet paprika	171329	Паприка молотая		tsp	tbsp	
 cumin	cumin seeds|cumin seed	170923	Зира		tsp, whole	tbsp, whole	
-cumin	ground cumin	170923					
+cumin	ground cumin	170923			@ground-cumin-tsp	@ground-cumin-tbsp	-
 turmeric	turmeric|ground turmeric	172231	Куркума молотая		tsp	tbsp	
 coconutmilk	coconut milk|canned coconut milk	170173	Молоко кокосовое консервированное			tbsp	cup:236.5882365
 vinegar	vinegar|white vinegar	172237	Уксус дистиллированный		tsp	tbsp	cup:236.5882365
@@ -145,7 +145,7 @@ curry	curry powder	170924	Порошок карри		tsp	tbsp
 wholemeal	wholemeal flour	168893	Мука пшеничная цельнозерновая		@cup/48	@cup/16	
 oats	rolled oats	173904	Хлопья овсяные сухие (USDA)		@cup/48	@cup/16	
 corn	sweetcorn	169998	Кукуруза сладкая сырая	ear, medium (6-3/4" to 7-1/2" long) yields			
-pita|pitabread	pita breads|cypriot pita	172816	Пита белая	pita, large (6-1/2" dia)			
+pita|pitabread	pita breads|cypriot pita	172816	Пита белая из необогащённой муки	pita, large (6-1/2" dia)			-
 curd	dry curd cheese	172181	Сухой обезжиренный творог (USDA)				
 breadcrumbs	breadcrumbs	174928	Сухари панировочные без приправ		@cup/48	@cup/16	
 tomato	tinned tomatoes	170051	Томаты в собственном соку			tbsp	
@@ -168,3 +168,87 @@ miso	miso|miso paste	172442	Паста мисо		@cup/48	tbsp
 eggwhite|eggwhites	egg whites|egg white	172183	Белок яичный сырой (USDA)	large			
 coconut	grated coconut	170169	Кокос свежий, мякоть				
 kefir|matsoni	matsoni or kefir	170904					cup:236.5882365
+# Additional exact culinary aliases, verified against USDA SR Legacy records.
+*	cumin seeds|cumin seed	170923	Зира (семена кумина)		tsp, whole	tbsp, whole	-
+*	celeriac|celery root	170400	Корень сельдерея сырой				-
+*	pine nuts	170591	Кедровые орехи				-
+*	almonds	170567	Миндаль сырой	almond			-
+*	shallot|shallots	170499	Лук-шалот сырой			tbsp chopped	-
+*	plantain|yellow plantains	169130	Банан плантан спелый сырой	plantain			-
+*	green plantain|green plantains	168215	Банан плантан зелёный сырой	plantain			-
+*	lemon zest	167749	Цедра лимона сырая		tsp	tbsp	-
+*	orange zest	169103	Цедра апельсина сырая		tsp	tbsp	-
+*	chicken stock	172884	Куриный бульон домашний		@cup/48	@cup/16	cup:236.5882365
+*	chicken broth	174536	Куриный бульон готовый		@cup/48	@cup/16	cup:236.5882365
+*	capers	172238	Каперсы консервированные без заливки			tbsp, drained	-
+*	green peas|peas	170419	Зелёный горошек сырой				-
+*	dried oregano	171328	Орегано сушёный		tsp, leaves		-
+*	saffron	170934	Шафран		tsp	tbsp	-
+*	ground nutmeg	171326	Мускатный орех молотый		tsp	tbsp	-
+*	ground cinnamon	171320	Корица молотая		tsp	tbsp	-
+*	ground cloves	171321	Гвоздика молотая		tsp	tbsp	-
+*	vanilla extract	173471	Ванильный экстракт		tsp	tbsp	tsp:4.92892159375
+*	clarified butter|ghee	171314	Масло сливочное топлёное				-
+*	mayonnaise	171009	Майонез обычный			tbsp	tbsp:14.78676478125
+*	desiccated coconut|unsweetened desiccated coconut	170170	Кокосовая стружка без сахара				-
+*	worcestershire sauce	171610	Соус вустерский			tbsp	tbsp:14.78676478125
+*	fish sauce	174531	Соус рыбный			tbsp	tbsp:14.78676478125
+*	sauerkraut	169279	Капуста квашеная с рассолом				-
+*	green beans	169961	Фасоль стручковая зелёная сырая				-
+*	dried apricots	173941	Курага	half			-
+*	prunes	168162	Чернослив без косточек	prune, pitted			-
+*	dates	171726	Финики Деглет Нур без косточек	date, pitted			-
+*	gruyère|gruyere	171242	Сыр грюйер	slice (1 oz)			-
+*	daikon	168451	Дайкон сырой	radish (7" long)			-
+*	baking soda|bicarbonate of soda	175040	Сода пищевая		tsp		-
+*	ice water|iced water|water for the dough	builtin-110					@water
+*	pitted prunes	168162					-
+*	roasted peanuts|dry roasted peanuts	173806	Арахис сухой обжарки без соли	peanut			-
+*	cornstarch	169698	Крахмал кукурузный		@cup/48	@cup/16	-
+starch	cornflour	169698			@cup/48	@cup/16	-
+*	ground turmeric	172231	Куркума молотая		tsp	tbsp	-
+*	distilled vinegar	172237	Уксус столовый дистиллированный		tsp	tbsp	tbsp:14.78676478125
+*	apple cider vinegar	173469	Уксус яблочный		tsp	tbsp	tbsp:14.78676478125
+*	coriander seeds|coriander seed	170922	Кориандр (семена)		tsp	tbsp	-
+*	dill|fresh dill	172233	Укроп свежий	sprigs			-
+*	fresh basil	172232	Базилик свежий	leaves		tbsp, chopped	-
+*	crushed tomatoes	170501	Томаты измельчённые консервированные			@cup/16	cup:236.5882365
+*	cooked short-grain rice	168932	Рис белый круглозёрный варёный				-
+*	unenriched short-grain rice	168931	Рис белый круглозёрный сухой				-
+*	chicken fillet|skinless chicken breast	171077		piece			-
+*	bell pepper|bell peppers	170108		medium (approx 2-3/4" long, 2-1/2 dia.)		tablespoon	-
+*	green bell pepper|green bell peppers	170427	Перец сладкий зелёный сырой	medium (approx 2-3/4" long, 2-1/2" dia)		tbsp	-
+*	red chilli|red chilli pepper|fresh red chilli	170106	Перец чили красный свежий	pepper			-
+*	raw ground pork 84% lean	168372	Фарш свиной сырой, 16% жира				-
+*	fresh cilantro|coriander leaf|coriander leaves	169997	Кинза свежая	sprigs			-
+*	carrots|carrot	170393		medium			-
+*	waxy potatoes	170026		Potato medium (2-1/4" to 3-1/4" dia)			-
+*	tinned tomatoes	170051				tbsp	cup:236.5882365
+*	flour for the dough|flour for the filling	168936			@cup/48	@cup/16	-
+*	butter for the filling	173430				tbsp	-
+*	maple syrup	169661	Сироп кленовый		@cup/48	tbsp	tbsp:14.78676478125
+*	grape leaves	168575	Листья винограда свежие	leaf			-
+*	grated gruyère|grated gruyere	171242					-
+*	pickled beetroot	170480	Свёкла маринованная				-
+*	thyme|fresh thyme	173470	Тимьян свежий		tsp		-
+*	sorrel	170076	Щавель сырой				-
+*	hot milk|milk for the custard	172217				tbsp	fl oz:29.5735295625
+*	ground cardamom	170919	Кардамон молотый		tsp, ground	tbsp, ground	-
+*	pitted cherries|sour cherries	173954	Вишня кислая без косточек				-
+*	cornmeal	169697	Кукурузная мука цельнозерновая				-
+*	caraway seeds	170918	Тмин (семена)		tsp	tbsp	-
+*	active dry yeast|dried active yeast	175043	Дрожжи сухие активные		tsp	tbsp	-
+*	sour cream|soured cream	171257				tbsp	cup:236.5882365
+*	plain whole milk yogurt	171284	Йогурт натуральный цельномолочный				cup (8 fl oz):236.5882365
+*	thick whole greek yogurt	171304	Густой греческий йогурт из цельного молока				-
+*	salt|table salt	173468	Соль поваренная		tsp	tbsp	-
+*	granulated sugar	169655				@cup/16	cup:236.5882365
+*	white wheat flour|plain wheat flour	168936			@cup/48	@cup/16	cup:236.5882365
+*	cold boiled water	builtin-110					@water
+*	ground almonds	170567					cup, ground:236.5882365
+*	whole milk	172217				tbsp	fl oz:29.5735295625
+*	unsalted butter	173430				tbsp	cup:236.5882365
+*	unsifted icing sugar	169656				tbsp unsifted	cup unsifted:236.5882365
+*	heavy whipping cream	170859	Сливки 36% (USDA)		@cup/48	tbsp	fl oz:29.5735295625
+*	ground cumin|cumin powder	170923			@ground-cumin-tsp	@ground-cumin-tbsp	-
+*	ground coriander	170922			@ground-coriander-tsp	@ground-coriander-tbsp	-

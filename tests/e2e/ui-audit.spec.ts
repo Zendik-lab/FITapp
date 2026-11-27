@@ -238,7 +238,7 @@ test('тема сообщает выбранный вариант и подде�
 
 test('загрузка и ошибка профиля доступны на низком экране', async ({
   page,
-  context,
+  browser,
   browserName,
 }) => {
   await page.setViewportSize({ width: 320, height: 240 });
@@ -286,43 +286,53 @@ test('загрузка и ошибка профиля доступны на ни
   await page.screenshot({
     path: `.expo/ui-audit/${browserName}-profile-error.png`,
   });
-  const loading = await context.newPage();
-  await loading.setViewportSize({ width: 320, height: 240 });
-  await loading.addInitScript(() => {
-    // Simulate an unresponsive browser API; production keeps its real timeout.
-    Object.defineProperty(indexedDB, 'open', { value: () => ({}) });
+  // Serve the mock in the document head so it precedes the app on all engines.
+  const loadingContext = await browser.newContext({
+    viewport: { width: 320, height: 240 },
+    serviceWorkers: 'block',
   });
-  await loading.goto(url);
-  await expect(
-    loading.getByRole('heading', { name: 'Загрузка приложения…', exact: true }),
-  ).toBeVisible();
-  await expectNoHorizontalOverflow(loading);
-  await loading.screenshot({
-    path: `.expo/ui-audit/${browserName}-startup-loading.png`,
-  });
-  await loading.close();
-  const profileLoading = await context.newPage();
-  await profileLoading.setViewportSize({ width: 320, height: 240 });
-  await profileLoading.addInitScript(() => {
-    const read = IDBObjectStore.prototype.get;
-    Object.defineProperty(IDBObjectStore.prototype, 'get', {
-      value: function (this: IDBObjectStore, key: IDBValidKey | IDBKeyRange) {
-        return key === 'user_state' ? {} : read.call(this, key);
+  try {
+    for (const { heading, screenshot, script } of [
+      {
+        heading: 'Загрузка приложения…',
+        screenshot: 'startup-loading',
+        script:
+          "Object.defineProperty(IDBFactory.prototype, 'open', { value: () => ({}) });",
       },
-    });
-  });
-  await profileLoading.goto(url);
-  await expect(
-    profileLoading.getByRole('heading', {
-      name: 'Загрузка профиля…',
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expectNoHorizontalOverflow(profileLoading);
-  await profileLoading.screenshot({
-    path: `.expo/ui-audit/${browserName}-profile-loading.png`,
-  });
-  await profileLoading.close();
+      {
+        heading: 'Загрузка профиля…',
+        screenshot: 'profile-loading',
+        script: `const read = IDBObjectStore.prototype.get;
+          Object.defineProperty(IDBObjectStore.prototype, 'get', {
+            value: function (key) {
+              return key === 'user_state' ? {} : read.call(this, key);
+            },
+          });`,
+      },
+    ]) {
+      const loading = await loadingContext.newPage();
+      await loading.route(url + '/', async (route) => {
+        const response = await route.fetch();
+        const html = await response.text();
+        await route.fulfill({
+          status: response.status(),
+          contentType: 'text/html',
+          body: html.replace('<head>', `<head><script>${script}</script>`),
+        });
+      });
+      await loading.goto(url);
+      await expect(
+        loading.getByRole('heading', { name: heading, exact: true }),
+      ).toBeVisible();
+      await expectNoHorizontalOverflow(loading);
+      await loading.screenshot({
+        path: `.expo/ui-audit/${browserName}-${screenshot}.png`,
+      });
+      await loading.close();
+    }
+  } finally {
+    await loadingContext.close();
+  }
 });
 
 test('ошибка нижнего поля редактора оставляет фокусируемое поле видимым', async ({

@@ -63,6 +63,7 @@ export interface RecipeFilters extends Partial<Record<NumericFilter, number>> {
   origin?: 'own' | 'builtin';
   favorite?: boolean;
   categories?: readonly string[];
+  cuisines?: readonly string[];
   tags?: readonly string[];
   difficulty?: string;
   noCook?: boolean;
@@ -74,7 +75,7 @@ export interface RecipeFilters extends Partial<Record<NumericFilter, number>> {
   remaining?: Pick<NutritionTargets, 'calories' | 'protein'>;
 }
 
-export function recipeTime(recipe: Recipe) {
+export function recipeTime(recipe: Pick<Recipe, 'preparationTime'>) {
   return recipe.preparationTime;
 }
 
@@ -84,11 +85,28 @@ export function isPantryBasic(name: string) {
   return basics.test(normalizeSearch(name));
 }
 
+// Reviewed equivalents for ingredient availability and filtering. Recipe
+// nutrition always uses the referenced product and its own snapshot.
+const ingredientEquivalents = new Map([
+  ['builtin-20', 'fdc-171287'], // Whole raw eggs.
+  ['builtin-22', 'fdc-172183'], // Raw egg whites.
+  ['builtin-23', 'fdc-172184'], // Raw egg yolks.
+  ['builtin-43', 'fdc-173904'], // Dry rolled oats.
+  ['builtin-70', 'fdc-170393'], // Raw carrots.
+  ['builtin-74', 'fdc-170457'], // Raw red tomatoes.
+  ['builtin-75', 'fdc-169975'], // Raw white cabbage.
+  ['builtin-78', 'fdc-170000'], // Raw common onions.
+  ['builtin-118', 'fdc-169640'], // Honey.
+]);
+export const recipeIngredientKey = (id: string) =>
+  ingredientEquivalents.get(id) ?? id;
+
 export interface IndexedRecipe {
-  recipe: Recipe;
+  recipe: RecipeCard;
   title: string;
   titleWords: string[];
   words: string[];
+  ingredientWords: (readonly string[])[];
   tags: Set<string>;
   ingredientIds: Set<string>;
   basicIds: Set<string>;
@@ -99,6 +117,28 @@ export interface IndexedRecipe {
   usage: number;
   lastUsed: string;
 }
+
+type RecipeCard = Pick<Recipe, 'id' | 'name' | 'category' | 'createdAt'> & {
+  metadata?: Pick<
+    NonNullable<Recipe['metadata']>,
+    'difficulty' | 'cuisine' | 'cook'
+  >;
+};
+type RecipeIndexInput = RecipeCard &
+  Pick<
+    Recipe,
+    | 'description'
+    | 'ingredients'
+    | 'servings'
+    | 'cookedWeightGrams'
+    | 'preparationTime'
+    | 'isFavorite'
+  > & {
+    metadata?: RecipeCard['metadata'] &
+      Pick<NonNullable<Recipe['metadata']>, 'tags'>;
+    searchNames?: readonly string[];
+  };
+const nameCollator = new Intl.Collator('ru');
 
 const recipeWords = new WeakMap<
   readonly IndexedRecipe[],
@@ -137,11 +177,12 @@ function searchCandidates(index: readonly IndexedRecipe[], terms: string[]) {
 }
 
 export function buildRecipeIndex(
-  recipes: readonly Recipe[],
+  recipes: Iterable<RecipeIndexInput>,
   products: readonly FoodProduct[],
   state: FoodState,
 ): IndexedRecipe[] {
   const byId = new Map(products.map((product) => [product.id, product]));
+  const ingredientWordCache = new Map<string, readonly string[]>();
   const stats = new Map<string, { count: number; last: string }>();
   for (const entry of state.entries) {
     if (!entry.recipe) continue;
@@ -155,7 +196,7 @@ export function buildRecipeIndex(
           : entry.createdAt,
     });
   }
-  return recipes.map((recipe) => {
+  return Array.from(recipes, (recipe) => {
     const nutrition = calculateRecipe(recipe).perServing;
     const time = recipeTime(recipe);
     const tags = new Set(recipe.metadata?.tags);
@@ -167,19 +208,48 @@ export function buildRecipeIndex(
     if (time !== undefined && time <= 20) tags.add('Быстрые рецепты');
     if (recipe.metadata?.difficulty === 'Простой') tags.add('Простые блюда');
     if (ingredientIds.size <= 5) tags.add('До пяти ингредиентов');
-    const ingredientNames = recipe.ingredients.flatMap((item) => [
-      item.productName,
-      ...(byId.get(item.productId)?.aliases ?? []),
-    ]);
-    return {
-      recipe,
-      title: normalizeSearch(recipe.name),
-      titleWords: searchTerms(recipe.name),
-      words: searchTerms(
-        [recipe.category, recipe.description, ...tags, ...ingredientNames].join(
+    const ingredientWords = recipe.ingredients.map((item) => {
+      const key = `${item.productId}\0${item.productName}`;
+      const cached = ingredientWordCache.get(key);
+      if (cached) return cached;
+      const words = searchTerms(
+        [item.productName, ...(byId.get(item.productId)?.aliases ?? [])].join(
           ' ',
         ),
+      );
+      ingredientWordCache.set(key, words);
+      return words;
+    });
+    return {
+      recipe: {
+        id: recipe.id,
+        name: recipe.name,
+        category: recipe.category,
+        createdAt: recipe.createdAt,
+        metadata: recipe.metadata && {
+          cuisine: recipe.metadata.cuisine,
+          cook: recipe.metadata.cook,
+          difficulty: recipe.metadata.difficulty,
+        },
+      },
+      title: normalizeSearch(recipe.name),
+      titleWords: searchTerms(
+        [recipe.name, ...(recipe.searchNames ?? [])].join(' '),
       ),
+      words: [
+        ...new Set([
+          ...searchTerms(
+            [
+              recipe.category,
+              recipe.metadata?.cuisine,
+              recipe.description,
+              ...tags,
+            ].join(' '),
+          ),
+          ...ingredientWords.flat(),
+        ]),
+      ],
+      ingredientWords,
       tags,
       ingredientIds,
       basicIds: new Set(
@@ -202,17 +272,29 @@ export function pantryMatch(
   available: ReadonlySet<string>,
   ignoreBasics: boolean,
 ) {
-  const relevant = [...item.ingredientIds].filter(
-    (id) => !ignoreBasics || !item.basicIds.has(id),
+  return matchAvailable(
+    item,
+    new Set([...available].map(recipeIngredientKey)),
+    ignoreBasics,
   );
-  const matched = relevant.filter((id) => available.has(id)).length;
+}
+
+function matchAvailable(
+  item: IndexedRecipe,
+  available: ReadonlySet<string>,
+  ignoreBasics: boolean,
+) {
+  const relevant = new Set(
+    [...item.ingredientIds]
+      .filter((id) => !ignoreBasics || !item.basicIds.has(id))
+      .map(recipeIngredientKey),
+  );
+  const matched = [...relevant].filter((id) => available.has(id)).length;
   return {
     matched,
-    total: relevant.length,
-    missing: relevant.length - matched,
-    percent: relevant.length
-      ? Math.round((100 * matched) / relevant.length)
-      : 100,
+    total: relevant.size,
+    missing: relevant.size - matched,
+    percent: relevant.size ? Math.round((100 * matched) / relevant.size) : 100,
   };
 }
 
@@ -252,16 +334,25 @@ function matchesRecommendation(item: IndexedRecipe, filters: RecipeFilters) {
 
 function matchesFilters(item: IndexedRecipe, f: RecipeFilters) {
   const { nutrition: n, recipe, tags, time, ingredientIds } = item;
+  function contains(id: string) {
+    if (ingredientIds.has(id)) return true;
+    const key = recipeIngredientKey(id);
+    for (const entry of ingredientIds)
+      if (recipeIngredientKey(entry) === key) return true;
+    return false;
+  }
   return (
     (f.section !== 'own' || !item.builtin) &&
     (f.section !== 'recent' || item.usage > 0) &&
     (!(f.section === 'favorite' || f.favorite) || item.favorite) &&
     (!f.origin || (f.origin === 'builtin') === item.builtin) &&
     (!f.categories?.length || f.categories.includes(recipe.category)) &&
+    (!f.cuisines?.length ||
+      f.cuisines.includes(recipe.metadata?.cuisine ?? '')) &&
     (!f.tags?.length || f.tags.every((tag) => tags.has(tag))) &&
     (!f.difficulty || recipe.metadata?.difficulty === f.difficulty) &&
     (!f.noCook ||
-      (recipe.metadata?.cook === 0 && recipe.metadata.prep > 0) ||
+      recipe.metadata?.cook === 0 ||
       recipe.category === 'Блюда без приготовления') &&
     (f.minCalories === undefined || n.calories >= f.minCalories) &&
     (f.maxCalories === undefined || n.calories <= f.maxCalories) &&
@@ -273,8 +364,8 @@ function matchesFilters(item: IndexedRecipe, f: RecipeFilters) {
     (f.maxTime === undefined || (time !== undefined && time <= f.maxTime)) &&
     (f.maxIngredients === undefined ||
       ingredientIds.size <= f.maxIngredients) &&
-    (f.required?.every((id) => ingredientIds.has(id)) ?? true) &&
-    !f.excluded?.some((id) => ingredientIds.has(id)) &&
+    (f.required?.every(contains) ?? true) &&
+    !f.excluded?.some(contains) &&
     matchesRecommendation(item, f)
   );
 }
@@ -283,11 +374,27 @@ export function findRecipes(
   index: readonly IndexedRecipe[],
   f: RecipeFilters = {},
 ) {
-  const terms = searchTerms(f.query ?? '');
-  const phrase = normalizeSearch(f.query ?? '');
-  const pantry = new Set(f.pantry);
+  const normalized = normalizeSearch(f.query ?? '');
+  const [phrase, without] = (' ' + normalized)
+    .split(' без ', 2)
+    .map((part) => part.trim());
+  const terms = searchTerms(without ? phrase : normalized);
+  const excludedIngredients =
+    without
+      ?.split(/ (?:и|или) /)
+      .map(searchTerms)
+      .filter((words) => words.length) ?? [];
+  const pantry = new Set(f.pantry?.map(recipeIngredientKey));
   const results = searchCandidates(index, terms).flatMap((item) => {
     if (!matchesFilters(item, f)) return [];
+    if (
+      excludedIngredients.some((words) =>
+        item.ingredientWords.some((ingredient) =>
+          words.every((word) => wordScore(word, ingredient) >= 2),
+        ),
+      )
+    )
+      return [];
     let score = phrase && item.title === phrase ? 1000 : 0;
     for (const term of terms) {
       const match = Math.max(
@@ -302,14 +409,14 @@ export function findRecipes(
         ...item,
         score,
         match: f.pantry
-          ? pantryMatch(item, pantry, !!f.ignoreBasics)
+          ? matchAvailable(item, pantry, !!f.ignoreBasics)
           : undefined,
       },
     ];
   });
   type Result = (typeof results)[number];
   const compareName = (a: Result, b: Result) =>
-    a.recipe.name.localeCompare(b.recipe.name, 'ru');
+    nameCollator.compare(a.recipe.name, b.recipe.name);
   const compareRelevance = (a: Result, b: Result) =>
     b.score - a.score ||
     (f.recommendation === 'Поможет добрать белок'

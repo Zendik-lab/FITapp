@@ -33,6 +33,7 @@ export interface RecipeIngredient {
   unit: IngredientUnit;
   gramsPerUnit: number;
   normalizedQuantity: number;
+  sourceQuantity?: string;
   nutritionSnapshot: NutritionTargets;
 }
 
@@ -54,9 +55,10 @@ export interface Recipe extends Omit<RecipeNutritionSnapshot, 'total'> {
   updatedAt: string;
   ingredients: RecipeIngredient[];
   metadata?: {
-    prep: number;
-    cook: number;
-    difficulty: 'Простой' | 'Средний' | 'Сложный';
+    prep?: number;
+    cook?: number;
+    difficulty?: 'Простой' | 'Средний' | 'Сложный';
+    cuisine?: string;
     tags: readonly string[];
     steps: readonly string[];
     sources: readonly string[];

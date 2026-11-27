@@ -33,7 +33,7 @@ import {
   ToggleChip,
   toggleValue,
 } from './recipe-library-controls';
-import { isPantryBasic } from './recipe-search';
+import { isPantryBasic, recipeIngredientKey } from './recipe-search';
 import {
   RecipeNutrition,
   recipeYield,
@@ -109,16 +109,21 @@ export function RecipeDetail({
       <RecipeArtwork category={recipe.category} large />
       <AppText variant="caption" tone="muted">
         {[
-          recipe.category,
-          recipe.metadata?.difficulty,
-          ...(recipe.metadata?.tags ?? []),
+          ...new Set([
+            recipe.category,
+            recipe.metadata?.cuisine,
+            recipe.metadata?.difficulty,
+            ...(recipe.metadata?.tags ?? []),
+          ]),
         ]
           .filter(Boolean)
           .join(' · ')}
       </AppText>
-      {recipe.metadata && recipe.metadata.prep + recipe.metadata.cook > 0 && (
+      {recipe.metadata?.prep !== undefined && recipe.metadata.prep > 0 && (
+        <AppText tone="muted">Подготовка · {recipe.metadata.prep} мин</AppText>
+      )}
+      {recipe.metadata?.cook !== undefined && (
         <AppText tone="muted">
-          Подготовка · {recipe.metadata.prep} мин ·{' '}
           {recipe.metadata.cook
             ? `Приготовление · ${recipe.metadata.cook} мин`
             : 'Без приготовления'}
@@ -129,6 +134,7 @@ export function RecipeDetail({
         nutrition={calculateRecipe(displayed)}
         mode={mode}
         onChange={setMode}
+        allowEstimatedPer100={!builtin}
       />
       {!!recipe.metadata?.sources.length && (
         <AppText variant="caption" tone="muted">
@@ -191,13 +197,20 @@ export function RecipeDetail({
         <Card key={item.id}>
           <AppText variant="action">{item.productName}</AppText>
           <AppText tone="muted">
+            {item.sourceQuantity && amount === null
+              ? `${item.sourceQuantity} · `
+              : ''}
             {formatFoodQuantity(item.quantity)} {labels[item.unit]}
           </AppText>
           {available && (
             <AppText variant="caption" tone="muted">
               {ignoreBasics && isPantryBasic(item.productName)
                 ? 'Базовый продукт'
-                : available.includes(item.productId)
+                : available.some(
+                      (id) =>
+                        recipeIngredientKey(id) ===
+                        recipeIngredientKey(item.productId),
+                    )
                   ? 'Есть дома'
                   : 'Не хватает'}
             </AppText>

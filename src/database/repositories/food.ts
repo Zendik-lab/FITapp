@@ -49,13 +49,17 @@ function recipe(value: unknown): value is Recipe {
     (!record(metadata) ||
       !['prep', 'cook'].every(
         (key) =>
-          typeof metadata[key] === 'number' &&
-          Number.isFinite(metadata[key]) &&
-          metadata[key] >= 0,
+          metadata[key] === undefined ||
+          (typeof metadata[key] === 'number' &&
+            Number.isFinite(metadata[key]) &&
+            metadata[key] >= 0),
       ) ||
-      !['Простой', 'Средний', 'Сложный'].includes(
-        String(metadata.difficulty),
-      ) ||
+      (metadata.difficulty !== undefined &&
+        !['Простой', 'Средний', 'Сложный'].includes(
+          String(metadata.difficulty),
+        )) ||
+      (metadata.cuisine !== undefined &&
+        typeof metadata.cuisine !== 'string') ||
       (metadata.seasoningNote !== undefined &&
         typeof metadata.seasoningNote !== 'string') ||
       (metadata.provenance !== undefined &&
@@ -71,6 +75,8 @@ function recipe(value: unknown): value is Recipe {
       ids.has(i.id) ||
       typeof i.productId !== 'string' ||
       typeof i.productName !== 'string' ||
+      (i.sourceQuantity !== undefined &&
+        typeof i.sourceQuantity !== 'string') ||
       !positiveNumber(i.quantity) ||
       !positiveNumber(i.gramsPerUnit) ||
       !positiveNumber(i.normalizedQuantity) ||

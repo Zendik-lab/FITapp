@@ -132,6 +132,7 @@ export function toggleValue(values: readonly string[], value: string) {
 
 export function FilterPanel({
   filters,
+  cuisines,
   draft,
   onDraft,
   onChange,
@@ -139,6 +140,7 @@ export function FilterPanel({
   onApply,
 }: {
   filters: RecipeFilters;
+  cuisines: readonly string[];
   draft: NumericDraft;
   onDraft(value: NumericDraft): void;
   onChange(value: RecipeFilters): void;
@@ -194,6 +196,28 @@ export function FilterPanel({
           onChange({ ...filters, difficulty: value || undefined })
         }
       />
+      {!!cuisines.length && (
+        <>
+          <AppText variant="section" accessibilityRole="header">
+            Национальные кухни
+          </AppText>
+          <View style={styles.chips}>
+            {cuisines.map((cuisine) => (
+              <ToggleChip
+                key={cuisine}
+                label={cuisine}
+                active={filters.cuisines?.includes(cuisine) ?? false}
+                onPress={() =>
+                  onChange({
+                    ...filters,
+                    cuisines: toggleValue(filters.cuisines ?? [], cuisine),
+                  })
+                }
+              />
+            ))}
+          </View>
+        </>
+      )}
       <ChoiceGroup
         label="Источник рецепта"
         value={filters.origin ?? 'all'}
@@ -279,22 +303,23 @@ export function FilterTags({
             },
           ],
     ),
-    ...(['categories', 'tags', 'required', 'excluded'] as const).flatMap(
-      (key) =>
-        (filters[key] ?? []).map((value) => {
-          const product = products.find((item) => item.id === value);
-          return {
-            id: `${key}:${value}`,
-            label: product
-              ? `${key === 'required' ? 'Добавить' : 'Исключить'} ${product.name}`
-              : value,
-            remove: () =>
-              onChange({
-                ...filters,
-                [key]: toggleValue(filters[key] ?? [], value),
-              }),
-          };
-        }),
+    ...(
+      ['categories', 'cuisines', 'tags', 'required', 'excluded'] as const
+    ).flatMap((key) =>
+      (filters[key] ?? []).map((value) => {
+        const product = products.find((item) => item.id === value);
+        return {
+          id: `${key}:${value}`,
+          label: product
+            ? `${key === 'required' ? 'Добавить' : 'Исключить'} ${product.name}`
+            : value,
+          remove: () =>
+            onChange({
+              ...filters,
+              [key]: toggleValue(filters[key] ?? [], value),
+            }),
+        };
+      }),
     ),
     ...(
       [

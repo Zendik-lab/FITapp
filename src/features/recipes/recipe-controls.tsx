@@ -28,10 +28,12 @@ export function RecipeNutrition({
   nutrition,
   mode,
   onChange,
+  allowEstimatedPer100 = true,
 }: {
   nutrition?: ReturnType<typeof calculateRecipe>;
   mode: NutritionMode;
   onChange(mode: NutritionMode): void;
+  allowEstimatedPer100?: boolean;
 }) {
   const [opacity] = useState(() => new Animated.Value(1));
   const [reduceMotion, setReduceMotion] = useState(true);
@@ -88,7 +90,11 @@ export function RecipeNutrition({
       <ChoiceGroup
         label="Режим расчёта"
         value={mode}
-        options={modes}
+        options={
+          nutrition?.estimated && !allowEstimatedPer100
+            ? modes.filter(({ value }) => value !== 'per100')
+            : modes
+        }
         onChange={onChange}
       />
     </Card>

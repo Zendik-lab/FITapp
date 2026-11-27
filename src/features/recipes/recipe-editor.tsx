@@ -175,7 +175,7 @@ export function RecipeEditor({
         ? ''
         : decimalText(original.preparationTime),
     prep:
-      original?.metadata === undefined
+      original?.metadata?.prep === undefined
         ? ''
         : decimalText(original.metadata.prep),
     difficulty:
@@ -229,6 +229,8 @@ export function RecipeEditor({
   const ingredients = draft.ingredients.flatMap(({ snapshot, amount }) => {
     try {
       const ingredient = resizeIngredient(snapshot, parseDecimal(amount));
+      if (ingredient.quantity !== snapshot.quantity)
+        delete ingredient.sourceQuantity;
       ingredientNutrition(ingredient);
       return [ingredient];
     } catch {
@@ -301,18 +303,24 @@ export function RecipeEditor({
         draft.difficulty ||
         prep !== undefined ||
         draft.category === 'Блюда без приготовления' ||
-        (original?.metadata && preparationTime !== undefined)
+        original?.metadata
           ? {
               prep:
                 draft.category === 'Блюда без приготовления'
-                  ? (preparationTime ?? 0)
-                  : (prep ?? 0),
+                  ? preparationTime
+                  : prep,
               cook:
                 draft.category === 'Блюда без приготовления'
                   ? 0
-                  : (preparationTime ?? 0) - (prep ?? 0),
-              difficulty:
-                draft.difficulty || original?.metadata?.difficulty || 'Простой',
+                  : preparationTime === undefined
+                    ? original?.preparationTime === undefined
+                      ? original?.metadata?.cook
+                      : undefined
+                    : prep === undefined
+                      ? undefined
+                      : preparationTime - prep,
+              difficulty: draft.difficulty || undefined,
+              cuisine: original?.metadata?.cuisine,
               tags: original?.metadata?.tags ?? [],
               steps: instructions
                 .split('\n')

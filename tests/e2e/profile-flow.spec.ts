@@ -415,6 +415,9 @@ test('ошибка автосохранения и отключение сети
   await expect(page.getByText(/Не удалось сохранить данные/)).toBeVisible();
   const name = page.getByLabel('Имя', { exact: true });
   await expect(name).toBeFocused();
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
   await context.setOffline(true);
   await expect(page.getByText('Офлайн', { exact: true })).toBeVisible();
   await expect(name).toBeFocused();

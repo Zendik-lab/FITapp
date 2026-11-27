@@ -13,7 +13,7 @@ import {
 import { addEntry, removeEntry } from '@/features/food/operations';
 import { validateRecipe } from './domain';
 import type { Recipe } from './model';
-import { getBuiltinRecipe, isBuiltinRecipe } from './library';
+import { getBuiltinRecipe, hasBuiltinRecipe, isBuiltinRecipe } from './library';
 
 function ensureCurrent(current: Recipe | undefined, expected: Recipe) {
   if (!current || JSON.stringify(current) !== JSON.stringify(expected))
@@ -66,7 +66,10 @@ export function deleteRecipe(
   return { ...state, recipes: state.recipes.filter((r) => r.id !== id) };
 }
 
-export function recipeIsFavorite(state: FoodState, recipe: Recipe) {
+export function recipeIsFavorite(
+  state: FoodState,
+  recipe: Pick<Recipe, 'id' | 'isFavorite'>,
+) {
   return isBuiltinRecipe(recipe.id)
     ? (state.favoriteRecipeIds ?? []).includes(recipe.id)
     : recipe.isFavorite;
@@ -87,7 +90,7 @@ export function setRecipeFavorite(
       },
       recipe,
     );
-  if (!getBuiltinRecipe(recipe.id)) throw new Error('Рецепт недоступен.');
+  if (!hasBuiltinRecipe(recipe.id)) throw new Error('Рецепт недоступен.');
   const favorites = new Set(state.favoriteRecipeIds);
   if (favorite) favorites.add(recipe.id);
   else favorites.delete(recipe.id);

@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createStaticServer } from '../../scripts/serve-web.cjs';
 import { sampleDraft } from '../fixtures/profile';
 import { unitoolsRecipes } from '../../src/features/recipes/library-unitools';
+import { wikibooksRecipes } from '../../src/features/recipes/library-wikibooks';
 
 let server: Server;
 let url: string;
@@ -124,6 +125,7 @@ async function state(page: Page) {
         entries: {
           date: string;
           meal: string;
+          amount: number;
           grams: number;
           product: { id: string; name: string; per100: { calories: number } };
         }[];
@@ -604,9 +606,12 @@ test('готовый каталог, поиск, фильтры, продукт�
   await context.setOffline(true);
   await button(page, 'Рецепты').click();
   await expect(
-    page.getByText(`Найдено рецептов: ${150 + unitoolsRecipes.length}`, {
-      exact: true,
-    }),
+    page.getByText(
+      `Найдено рецептов: ${150 + unitoolsRecipes.length + wikibooksRecipes.length}`,
+      {
+        exact: true,
+      },
+    ),
   ).toBeVisible();
   await typeStable(page, 'Поиск рецептов', 'овсянка с яблоком');
   const name = 'Молочная овсянка с яблоком';
@@ -683,4 +688,51 @@ test('импортированный рецепт офлайн ищется по
   await button(page, 'Добавить в дневник').click();
   const [entry] = (await state(page)).entries;
   expect(entry.product.id).toBe('library:unitools-tabbouleh');
+});
+
+test('Wikibooks офлайн: кухня, исходная мера и дробная порция', async ({
+  page,
+  context,
+}) => {
+  const started = performance.now();
+  await seed(page);
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
+  const installed = performance.now();
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+  await button(page, 'Рецепты').click();
+  await expect(page.getByText(/Найдено рецептов:/)).toBeVisible();
+  const listed = performance.now();
+  await typeStable(page, 'Поиск рецептов', 'полента');
+  await button(page, 'Фильтры').click();
+  await button(page, 'Итальянская кухня').click();
+  await button(page, 'Применить фильтры').click();
+  const filtered = performance.now();
+  await button(page, 'Открыть: Итальянская полента').click();
+  await expect(
+    page.getByText(/Open Recipe Corpus · CC BY-SA 4.0/),
+  ).toBeVisible();
+  await expect(page.getByText(/1 кг · /)).toBeVisible();
+  const detail = performance.now();
+  await button(page, 'Добавить в дневник').click();
+  await page.getByLabel('Съедено порций', { exact: true }).fill('0,5');
+  await button(page, 'Добавить в дневник').click();
+  await expect
+    .poll(async () => (await state(page)).entries[0]?.product.id)
+    .toBe('library:wikibooks-pl-31729');
+  const [entry] = (await state(page)).entries;
+  expect(entry.amount).toBe(0.5);
+  const intervals = [
+    installed - started,
+    listed - installed,
+    filtered - listed,
+    detail - filtered,
+    performance.now() - detail,
+  ].map(Math.round);
+  process.stdout.write(
+    `Wikibooks browser flow (ms), preparation / cold reopen and list / search and filtering / detail / diary: ${intervals.join(' / ')}\n`,
+  );
 });

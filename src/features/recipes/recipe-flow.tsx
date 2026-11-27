@@ -19,7 +19,11 @@ import { ProductPicker } from '@/features/food/product-picker';
 import { ProductEditor } from '@/features/food/product-editor';
 import { useNutrition } from '@/features/nutrition/nutrition-context';
 import { spacing } from '@/theme';
-import { builtinRecipes, getBuiltinRecipe } from './library';
+import {
+  builtinRecipeCuisines,
+  builtinRecipeSearchInputs,
+  getBuiltinRecipe,
+} from './library';
 import type { Recipe } from './model';
 import { rememberRecipeQuery, setRecipeFavorite } from './operations';
 import { SearchField } from './recipe-controls';
@@ -108,7 +112,14 @@ export function RecipeFlow({
   const products = session?.products ?? noProducts;
   const index = useMemo(
     () =>
-      buildRecipeIndex([...state.recipes, ...builtinRecipes], products, state),
+      buildRecipeIndex(
+        (function* () {
+          yield* state.recipes;
+          yield* builtinRecipeSearchInputs();
+        })(),
+        products,
+        state,
+      ),
     [products, state],
   );
   const remaining = useMemo(() => {
@@ -139,11 +150,12 @@ export function RecipeFlow({
   const start = resultPage * pageSize;
   const disabled =
     !session || session.pending || session.loading || !!session.failure;
-  const selected =
-    page.kind === 'detail'
-      ? (getBuiltinRecipe(page.id) ??
-        state.recipes.find((recipe) => recipe.id === page.id))
-      : undefined;
+  function resolveRecipe(id: string) {
+    return (
+      getBuiltinRecipe(id) ?? state.recipes.find((recipe) => recipe.id === id)
+    );
+  }
+  const selected = page.kind === 'detail' ? resolveRecipe(page.id) : undefined;
 
   function list(message = '') {
     setNotice(message);
@@ -183,7 +195,7 @@ export function RecipeFlow({
       }));
     setPageIndex(0);
   }
-  function open(recipe: Recipe) {
+  function open(recipe: Pick<Recipe, 'id'>) {
     setPage({ kind: 'detail', id: recipe.id });
   }
   if (page.kind === 'create' || page.kind === 'edit') {
@@ -282,7 +294,9 @@ export function RecipeFlow({
       ? 'Все ингредиенты есть'
       : missing === 1
         ? 'Не хватает одного ингредиента'
-        : 'Не хватает двух или более ингредиентов';
+        : missing === 2
+          ? 'Не хватает двух ингредиентов'
+          : 'Не хватает трёх или более ингредиентов';
 
   return (
     <FoodForm
@@ -403,6 +417,7 @@ export function RecipeFlow({
       {filtersOpen && (
         <FilterPanel
           filters={filters}
+          cuisines={builtinRecipeCuisines}
           draft={draft}
           onDraft={setDraft}
           onChange={setFilterValues}
@@ -595,11 +610,13 @@ export function RecipeFlow({
                           : 'В избранное: ') + recipe.name
                       }
                       disabled={disabled}
-                      onPress={() =>
-                        void change((current) =>
-                          setRecipeFavorite(current, recipe, !favorite),
-                        )
-                      }
+                      onPress={() => {
+                        const original = resolveRecipe(recipe.id);
+                        if (original)
+                          void change((current) =>
+                            setRecipeFavorite(current, original, !favorite),
+                          );
+                      }}
                     />
                   </View>
                   <NutritionValues
@@ -626,7 +643,10 @@ export function RecipeFlow({
                       icon="Plus"
                       label={'Добавить в дневник: ' + recipe.name}
                       disabled={disabled}
-                      onPress={() => setPage({ kind: 'log', original: recipe })}
+                      onPress={() => {
+                        const original = resolveRecipe(recipe.id);
+                        if (original) setPage({ kind: 'log', original });
+                      }}
                     />
                   </View>
                 </Card>
