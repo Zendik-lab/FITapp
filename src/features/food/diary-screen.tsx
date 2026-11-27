@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { AppText } from '@/components/app-text';
 import { ActionNotice } from '@/components/action-notice';
@@ -34,6 +34,8 @@ import { CompareBudgetScreen } from '@/features/smart/compare-budget-screen';
 import { DiaryRow } from './diary-row';
 import { AwardNotice } from '@/features/smart/award-notice';
 
+const PlannerScreen = lazy(() => import('@/features/planner/planner-screen'));
+
 export function DiaryScreen() {
   const session = useFoodDiary();
   const { selectedDate, today, selectDate } = useSelectedDate();
@@ -44,6 +46,7 @@ export function DiaryScreen() {
   } | null>(null);
   const [calculator, setCalculator] = useState(false);
   const [recipes, setRecipes] = useState(false);
+  const [planner, setPlanner] = useState(false);
   const [updated, setUpdated] = useState(false);
   const [copying, setCopying] = useState<MealType | 'day' | null>(null);
   const [tools, setTools] = useState(false);
@@ -96,6 +99,23 @@ export function DiaryScreen() {
     setRecipes(false);
   }
   function renderDetail() {
+    if (planner && session)
+      return (
+        <Suspense
+          fallback={
+            <ScreenContainer>
+              <AppText
+                accessibilityRole="status"
+                accessibilityLiveRegion="polite"
+              >
+                Открываем план питания…
+              </AppText>
+            </ScreenContainer>
+          }
+        >
+          <PlannerScreen session={session} onClose={() => setPlanner(false)} />
+        </Suspense>
+      );
     if (session && (panel === 'fridge' || panel === 'shopping'))
       return (
         <PantryScreen
@@ -193,6 +213,13 @@ export function DiaryScreen() {
             setUpdated(false);
             setCalculator(true);
           }}
+        />
+        <PrimaryButton
+          secondary
+          icon="Utensils"
+          label="План питания"
+          disabled={disabled}
+          onPress={() => setPlanner(true)}
         />
         <PrimaryButton
           secondary

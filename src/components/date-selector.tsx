@@ -33,11 +33,15 @@ export function DateSelector({
   today,
   onChange,
   daily = false,
+  showCalendar = daily,
+  hasPlan,
 }: {
   date: Date;
   today: Date;
   onChange: (date: Date) => void;
   daily?: boolean;
+  showCalendar?: boolean;
+  hasPlan?(date: Date): boolean;
 }) {
   const [calendar, setCalendar] = useState(false);
   const { colors } = useAppTheme();
@@ -55,9 +59,11 @@ export function DateSelector({
           accessibilityRole="button"
           accessibilityLabel={formatDate(date, shortDate)}
           accessibilityHint={
-            daily ? 'Открывает календарь.' : 'Возвращает к сегодняшней дате.'
+            showCalendar
+              ? 'Открывает календарь.'
+              : 'Возвращает к сегодняшней дате.'
           }
-          onPress={() => (daily ? setCalendar(true) : onChange(today))}
+          onPress={() => (showCalendar ? setCalendar(true) : onChange(today))}
           style={({ pressed }) => [
             styles.current,
             { opacity: pressed ? 0.6 : 1 },
@@ -82,12 +88,13 @@ export function DateSelector({
         {weekDays(date).map((day) => {
           const selected = sameDay(day, date);
           const currentDay = sameDay(day, today);
+          const planned = hasPlan?.(day);
           return (
             <Touchable
               key={day.getTime()}
               accessibilityRole="button"
               accessibilityState={{ selected }}
-              accessibilityLabel={`${formatDate(day, fullDate)}${currentDay ? ', сегодня' : ''}`}
+              accessibilityLabel={`${formatDate(day, fullDate)}${currentDay ? ', сегодня' : ''}${planned ? ', есть план питания' : ''}`}
               onPress={() => onChange(day)}
               style={({ pressed }) => [
                 styles.day,
@@ -118,7 +125,7 @@ export function DateSelector({
                 style={[
                   styles.dot,
                   {
-                    backgroundColor: currentDay
+                    backgroundColor: (hasPlan ? planned : currentDay)
                       ? selected
                         ? colors.onAccent
                         : colors.accentText
@@ -130,7 +137,7 @@ export function DateSelector({
           );
         })}
       </ScrollView>
-      {daily && (
+      {showCalendar && (
         <CalendarPicker
           open={calendar}
           date={date}

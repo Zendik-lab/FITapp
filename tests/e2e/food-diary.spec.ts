@@ -31,6 +31,136 @@ const visible = (page: Page, locator: Locator) =>
 const button = (page: Page, name: string) =>
   visible(page, page.getByRole('button', { name, exact: true }));
 
+test('планирует неделю без сети, восстанавливает рацион и переносит фактическую порцию', async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(90_000);
+  await seed(page);
+  await expect
+    .poll(() => page.evaluate(() => !!navigator.serviceWorker.controller))
+    .toBe(true);
+  await context.setOffline(true);
+  await button(page, 'План питания').click();
+  await button(page, 'Автоподбор рациона').click();
+  await expect(page.getByLabel('Дней подряд', { exact: true })).toHaveValue(
+    '7',
+  );
+  await button(page, 'Составить рацион').click();
+  await expect(
+    page.getByText('Предварительный просмотр', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/Отклонение .*%/)).toHaveCount(7);
+  await button(page, 'Сохранить рацион').click();
+  await expect(
+    page.getByText('Рацион сохранён.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('В дневнике · 0 ккал', { exact: true }),
+  ).toBeVisible();
+  const item = visible(
+    page,
+    page.getByRole('button', { name: /^Изменить · / }),
+  ).first();
+  const label = await item.getAttribute('aria-label');
+  expect(label).toBeTruthy();
+  await item.click();
+  await button(page, 'Изменить порцию').click();
+  let quantity = visible(
+    page,
+    page.getByRole('textbox', { name: /^Количество,/ }),
+  );
+  const quantityLabel = await quantity.getAttribute('aria-label');
+  expect(quantityLabel).toBeTruthy();
+  await typeStable(page, quantityLabel!, '1,25');
+  await button(page, 'Сохранить порцию').click();
+  await expect(
+    page.getByText('Блюдо обновлено.', { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await button(page, 'План питания').click();
+  await expect(button(page, label!).first()).toBeVisible();
+  await expect(
+    page.getByText('В дневнике · 0 ккал', { exact: true }),
+  ).toBeVisible();
+  await button(page, 'Съел').first().click();
+  quantity = visible(page, page.getByRole('textbox', { name: /^Количество,/ }));
+  await expect(quantity).toHaveValue('1.25');
+  await typeStable(page, quantityLabel!, '1');
+  await button(page, 'Записать в дневник').click();
+  await expect(
+    page.getByText('Блюдо добавлено в дневник.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('В дневнике · 0 ккал', { exact: true }),
+  ).toHaveCount(0);
+  await button(page, 'Назад к дневнику').click();
+  await expect(
+    page.getByText(label!.slice('Изменить · '.length), { exact: true }),
+  ).toBeVisible();
+  await button(page, 'План питания').click();
+  await button(page, label!).first().click();
+  await button(page, 'Отменить отметку «Съел»').click();
+  await expect(
+    page.getByText('В дневнике · 0 ккал', { exact: true }),
+  ).toBeVisible();
+});
+
+test('создаёт ручной план, сохраняет шаблон и подтверждает замену при копировании', async ({
+  page,
+}) => {
+  await seed(page);
+  await button(page, 'План питания').click();
+  await button(page, 'Добавить приём пищи').click();
+  await typeStable(page, 'Название приёма пищи', 'Поздний завтрак');
+  await typeStable(page, 'Время, ЧЧ:ММ', '09:30');
+  await button(page, 'Сохранить приём пищи').click();
+  await expect(
+    page.getByRole('button', { name: /^Поздний завтрак, 09:30,/ }),
+  ).toBeVisible();
+  await button(page, 'Добавить блюдо').click();
+  await typeStable(page, 'Название или штрихкод продукта', 'банан');
+  await button(page, 'Выбрать: Банан').click();
+  await typeStable(page, 'Количество, г', '110');
+  await button(page, 'Добавить в план').click();
+  await expect(button(page, 'Изменить · Банан')).toContainText('110 г');
+
+  await button(page, 'Действия с планом').click();
+  await button(page, 'Сохранить день как шаблон').click();
+  await typeStable(page, 'Название шаблона', 'Любимый завтрак');
+  await button(page, 'Сохранить шаблон').click();
+  await expect(
+    page.getByText('Шаблон сохранён.', { exact: true }),
+  ).toBeVisible();
+  await button(page, 'Действия с планом').click();
+  await button(page, 'Копировать или повторить').click();
+  await typeStable(page, 'Дней подряд', '2');
+  await button(page, 'Копировать рацион').click();
+  await expect(
+    page.getByText('Рацион скопирован.', { exact: true }),
+  ).toBeVisible();
+  await expect(button(page, 'Изменить · Банан')).toContainText('110 г');
+  await button(page, 'Действия с планом').click();
+  await button(page, 'Копировать или повторить').click();
+  await button(page, 'Копировать рацион').click();
+  await expect(
+    page.getByRole('dialog', { name: 'Заменить планы на выбранные даты?' }),
+  ).toBeVisible();
+  await button(page, 'Подтвердить замену').click();
+  await expect(
+    page.getByText('Рацион скопирован.', { exact: true }),
+  ).toBeVisible();
+  await button(page, 'Действия с планом').click();
+  await button(page, 'Шаблоны питания').click();
+  await expect(
+    page.getByText('Любимый завтрак', { exact: true }),
+  ).toBeVisible();
+  await button(page, 'Добавить к плану').click();
+  await expect(
+    page.getByRole('button', { name: /^Поздний завтрак, 09:30,/ }),
+  ).toHaveCount(2);
+});
+
 test('пакет рецептов загружается отдельно, открывается офлайн и удаляется', async ({
   page,
   context,

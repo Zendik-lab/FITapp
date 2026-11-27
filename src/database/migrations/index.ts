@@ -5,6 +5,7 @@ import { userStateMigration } from './002-user-state';
 import { foodDiaryMigration } from './003-food-diary';
 import { recipesMigration } from './004-recipes';
 import { recipeLibraryMigration } from './005-recipe-library';
+import { mealPlannerMigration } from './006-meal-planner';
 
 type Migration = {
   version: number;
@@ -23,6 +24,7 @@ const migrations: readonly Migration[] = [
   foodDiaryMigration,
   recipesMigration,
   recipeLibraryMigration,
+  mealPlannerMigration,
 ];
 
 export async function migrateDatabase(

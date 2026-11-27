@@ -14,6 +14,14 @@ import { addEntry } from '@/features/food/operations';
 import { makeIngredient } from '@/features/recipes/domain';
 import { addRecipeEntry, saveRecipe } from '@/features/recipes/operations';
 import {
+  createPlanDay,
+  createPlanMeal,
+  markPlanMeal,
+  planItemFromProduct,
+  readPlanner,
+  savePlanDays,
+} from '@/features/planner/operations';
+import {
   defaultPreferences,
   resolveNutrition,
 } from '@/features/nutrition/model';
@@ -105,6 +113,34 @@ test('реальный SQLite обновляет схему v1 и сохраня
     { version: 3 },
     { version: 4 },
     { version: 5 },
+    { version: 6 },
+  ]);
+});
+
+test('SQLite применяет миграцию планов поверх прежней схемы и сохраняет связанные записи', async () => {
+  await migrateDatabase(mockDatabase);
+  sql.exec(
+    "DELETE FROM schema_migrations WHERE version = 6; DELETE FROM app_settings WHERE key = 'meal_planner_schema'",
+  );
+  const storage = await getSettingsStorage();
+  const repository = createFoodRepository(storage);
+  const date = '2026-11-27';
+  const product = builtinFoods[0];
+  const existing = makeEntry(product, 100, 'g', 'lunch', date);
+  await repository.change((state) => addEntry(state, existing));
+  await migrateDatabase(mockDatabase);
+  expect(await storage.get('meal_planner_schema')).toBe('1');
+  const meal = createPlanMeal('breakfast');
+  const item = planItemFromProduct(product, 110, 'g', date, meal.kind);
+  const populated = { ...meal, items: [item] };
+  const day = { ...createPlanDay(date), meals: [populated] };
+  await repository.change((state) => savePlanDays(state, [day]));
+  await repository.change((state) => markPlanMeal(state, day, populated));
+  const loaded = await createFoodRepository(await getSettingsStorage()).load();
+  expect(readPlanner(loaded).days[date]).toEqual(day);
+  expect(loaded.entries.map(({ id }) => id)).toEqual([
+    existing.id,
+    item.entry.id,
   ]);
 });
 

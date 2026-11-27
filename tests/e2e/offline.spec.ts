@@ -874,12 +874,27 @@ test('холодный запуск после полного перезапус
         'Для записи в граммах укажите фактический вес готового блюда в рецепте.',
       ),
     ).toBeVisible();
+    const recipeDate = await page.evaluate(() => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return new Intl.DateTimeFormat('sv-SE').format(yesterday);
+    });
+    await page
+      .getByLabel('Дата записи, ГГГГ-ММ-ДД', { exact: true })
+      .fill(recipeDate);
     await button('Добавить в дневник').click();
     await expect(
       page.getByText('Блюдо добавлено в дневник.', { exact: true }),
     ).toBeVisible();
     const diary = await setting(page, 'food_diary_state');
     expect(diary).toContain('Банановый перекус');
+    const { entries } = JSON.parse(diary!) as {
+      entries: { date: string; product: { name: string } }[];
+    };
+    const recorded = entries.find(
+      ({ product }) => product.name === 'Банановый перекус',
+    );
+    expect(recorded?.date).toBe(recipeDate);
     await page.getByRole('tab', { name: 'Профиль', exact: true }).click();
     const updated = process.env.PWA_UPDATE_BUILD_DIR
       ? site.deployExport(process.env.PWA_UPDATE_BUILD_DIR)
@@ -919,6 +934,18 @@ test('холодный запуск после полного перезапус
     expect(await setting(page, 'offline_check')).toBe('retained');
     expect(await setting(page, 'food_diary_state')).toBe(diary);
     await page.getByRole('tab', { name: 'Питание', exact: true }).click();
+    const daysSinceRecord = await page.evaluate((date) => {
+      const today = new Date();
+      const todayUtc = Date.UTC(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate(),
+      );
+      return (todayUtc - Date.parse(date)) / 86_400_000;
+    }, recipeDate);
+    expect(daysSinceRecord).toBeGreaterThanOrEqual(1);
+    for (let day = 0; day < daysSinceRecord; day++)
+      await button('Предыдущий день').click();
     await expect(button('Изменить запись: Банановый перекус')).toBeVisible();
     await button('Рецепты').click();
     await expect(button('Открыть: Банановый перекус')).toBeVisible();

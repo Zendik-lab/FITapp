@@ -157,7 +157,7 @@ export function addRecipeEntry(
   );
 }
 
-function makeRecipeEntry(
+export function makeRecipeEntry(
   product: RecipeDiaryEntry['product'],
   recipe: RecipeDiaryEntry['recipe'],
   amount: number,

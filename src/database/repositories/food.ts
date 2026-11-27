@@ -2,6 +2,7 @@ import type { SettingsStorage } from '../settings-contract';
 import {
   emptyFoodState,
   meals,
+  type FoodDiaryEntry,
   type FoodProduct,
   type FoodState,
   type RecipeDiaryEntry,
@@ -18,6 +19,7 @@ import {
 import { positive, validateRecipe } from '@/features/recipes/domain';
 import type { Recipe } from '@/features/recipes/model';
 import { positiveValue, validPantry } from '@/features/smart/model';
+import { validPlanner } from '@/features/planner/validation';
 
 const key = 'food_diary_state';
 function record(value: unknown): value is Record<string, unknown> {
@@ -209,6 +211,36 @@ function product(value: unknown): value is FoodProduct {
   }
   return validateProduct(value as unknown as FoodProduct).errors.length === 0;
 }
+function entry(e: unknown): e is FoodDiaryEntry {
+  if (
+    !record(e) ||
+    typeof e.id !== 'string' ||
+    typeof e.date !== 'string' ||
+    typeof e.meal !== 'string' ||
+    !Object.hasOwn(meals, e.meal) ||
+    typeof e.amount !== 'number' ||
+    !['g', 'ml', 'piece', 'serving'].includes(String(e.unit)) ||
+    typeof e.createdAt !== 'string'
+  )
+    return false;
+  if (e.copiedFrom !== undefined && typeof e.copiedFrom !== 'string')
+    return false;
+  try {
+    if (dateKey(parseDateKey(e.date)) !== e.date) return false;
+    if (e.recipe !== undefined) return recipeEntry(e);
+    if (!product(e.product)) return false;
+    const quantity = portionBaseAmount(
+      e.product,
+      e.amount,
+      e.unit as 'g' | 'ml' | 'piece' | 'serving',
+    );
+    return isMassBased(e.product)
+      ? quantity === e.grams && e.milliliters === undefined
+      : e.grams === null && quantity === e.milliliters;
+  } catch {
+    return false;
+  }
+}
 function valid(value: unknown): value is FoodState {
   if (
     !record(value) ||
@@ -242,38 +274,8 @@ function valid(value: unknown): value is FoodState {
     new Set(value.recipes.map((r) => r.id)).size !== value.recipes.length
   )
     return false;
-  if (
-    !value.entries.every((e) => {
-      if (
-        !record(e) ||
-        typeof e.id !== 'string' ||
-        typeof e.date !== 'string' ||
-        typeof e.meal !== 'string' ||
-        !Object.hasOwn(meals, e.meal) ||
-        typeof e.amount !== 'number' ||
-        !['g', 'ml', 'piece', 'serving'].includes(String(e.unit)) ||
-        typeof e.createdAt !== 'string'
-      )
-        return false;
-      if (e.copiedFrom !== undefined && typeof e.copiedFrom !== 'string')
-        return false;
-      try {
-        if (dateKey(parseDateKey(e.date)) !== e.date) return false;
-        if (e.recipe !== undefined) return recipeEntry(e);
-        if (!product(e.product)) return false;
-        const quantity = portionBaseAmount(
-          e.product,
-          e.amount,
-          e.unit as 'g' | 'ml' | 'piece' | 'serving',
-        );
-        return isMassBased(e.product)
-          ? quantity === e.grams && e.milliliters === undefined
-          : e.grams === null && quantity === e.milliliters;
-      } catch {
-        return false;
-      }
-    })
-  )
+  if (!value.entries.every(entry)) return false;
+  if (value.planner !== undefined && !validPlanner(value.planner, entry))
     return false;
   return (
     value.favorites.every(

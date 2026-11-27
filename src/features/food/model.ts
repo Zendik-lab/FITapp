@@ -2,6 +2,7 @@ import type { NutritionTargets } from '@/features/nutrition/engine';
 import type { Recipe, RecipeNutritionSnapshot } from '@/features/recipes/model';
 import type { FoodUnit } from './units';
 import type { SmartPantry } from '@/features/smart/model';
+import type { PlannerState } from '@/features/planner/model';
 
 export { unitLabels, type FoodUnit } from './units';
 
@@ -116,6 +117,7 @@ export interface FoodState {
   productSearchHistory?: string[];
   pantry?: SmartPantry;
   milestones?: Record<string, string>;
+  planner?: PlannerState;
 }
 export const emptyFoodState = (): FoodState => ({
   version: 1,
